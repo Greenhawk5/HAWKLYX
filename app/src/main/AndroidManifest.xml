@@ -28,10 +28,11 @@
             </intent-filter>
         </activity>
 
-        <!-- HAWKLYX Home Screen Widget Receiver -->
+        <!-- HAWKLYX Home Screen Widget Receiver: Market Snapshot -->
         <receiver
             android:name=".widget.HawklyxWidgetProvider"
-            android:exported="true">
+            android:exported="true"
+            android:label="@string/widget_snapshot_name">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
                 <action android:name="ir.alifaniani.hawklyx.ACTION_REFRESH" />
@@ -39,6 +40,20 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/hawklyx_widget_info" />
+        </receiver>
+
+        <!-- HAWKLYX Home Screen Widget Receiver: Market Intelligence -->
+        <receiver
+            android:name=".widget.HawklyxIntelligenceWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_intelligence_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="ir.alifaniani.hawklyx.ACTION_REFRESH" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/hawklyx_intelligence_widget_info" />
         </receiver>
 
     </application>

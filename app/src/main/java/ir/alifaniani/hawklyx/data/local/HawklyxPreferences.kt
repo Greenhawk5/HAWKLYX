@@ -5,6 +5,10 @@ import android.content.SharedPreferences
 import ir.alifaniani.hawklyx.data.model.BrentPriceObservation
 import ir.alifaniani.hawklyx.data.model.DataFreshnessStatus
 import ir.alifaniani.hawklyx.data.model.HistoricalObservationPoint
+import ir.alifaniani.hawklyx.data.model.HistoricalPointModel
+import ir.alifaniani.hawklyx.data.model.HistoryRange
+import ir.alifaniani.hawklyx.data.model.HistoryResponseModel
+import ir.alifaniani.hawklyx.data.model.HistorySummaryModel
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -23,7 +27,8 @@ class HawklyxPreferences(context: Context) {
     fun saveObservation(
         observation: BrentPriceObservation,
         status: DataFreshnessStatus,
-        nextRefreshAllowedTimeMs: Long
+        nextRefreshAllowedTimeMs: Long,
+        isMarketOpen: Boolean = true
     ) {
         val now = System.currentTimeMillis()
         prefs.edit().apply {
@@ -41,6 +46,7 @@ class HawklyxPreferences(context: Context) {
             putBoolean(KEY_IS_SYNTHETIC, observation.isSynthetic)
             putString(KEY_SOURCE, observation.source)
             putString(KEY_STATUS, status.name)
+            putBoolean(KEY_MARKET_OPEN, isMarketOpen)
             putLong(KEY_NEXT_REFRESH_ALLOWED, nextRefreshAllowedTimeMs)
             putLong(KEY_LAST_FETCH_TIME, now)
             apply()
@@ -57,9 +63,14 @@ class HawklyxPreferences(context: Context) {
         )
     }
 
-    fun saveStatusOnly(status: DataFreshnessStatus, nextRefreshAllowedTimeMs: Long) {
+    fun saveStatusOnly(
+        status: DataFreshnessStatus,
+        nextRefreshAllowedTimeMs: Long,
+        isMarketOpen: Boolean = true
+    ) {
         prefs.edit().apply {
             putString(KEY_STATUS, status.name)
+            putBoolean(KEY_MARKET_OPEN, isMarketOpen)
             putLong(KEY_NEXT_REFRESH_ALLOWED, nextRefreshAllowedTimeMs)
             apply()
         }
@@ -96,6 +107,12 @@ class HawklyxPreferences(context: Context) {
         } catch (_: Exception) {
             DataFreshnessStatus.NO_DATA
         }
+    }
+
+    fun isMarketOpen(): Boolean {
+        val status = getLastStatus()
+        if (status == DataFreshnessStatus.MARKET_CLOSED) return false
+        return prefs.getBoolean(KEY_MARKET_OPEN, true)
     }
 
     fun getNextRefreshAllowedTimeMs(): Long {
@@ -159,6 +176,147 @@ class HawklyxPreferences(context: Context) {
         }
     }
 
+    fun saveCachedHistoryResponse(response: HistoryResponseModel) {
+        try {
+            val root = JSONObject().apply {
+                put("status", response.status)
+                put("instrument", response.instrument)
+                put("currency", response.currency)
+                put("unit", response.unit)
+                put("range", response.range.apiValue)
+                put("resolution", response.resolution)
+                put("collection_start_date", response.collectionStartDate)
+                put("earliest_timestamp", response.earliestTimestamp)
+                put("latest_timestamp", response.latestTimestamp)
+                put("count", response.count)
+                put("is_partial", response.isPartial)
+                put("server_time", response.serverTime)
+                put("message", response.message)
+
+                response.summary?.let { s ->
+                    val sumObj = JSONObject().apply {
+                        put("first_price", s.firstPrice)
+                        put("latest_price", s.latestPrice)
+                        put("change_absolute", s.changeAbsolute)
+                        put("change_percent", s.changePercent)
+                        put("high", s.high)
+                        put("low", s.low)
+                    }
+                    put("summary", sumObj)
+                }
+
+                val ptsArray = JSONArray()
+                for (pt in response.points) {
+                    val ptObj = JSONObject().apply {
+                        put("timestamp", pt.timestamp)
+                        put("timestampMs", pt.timestampMs)
+                        put("price", pt.price)
+                        put("formatted", pt.formatted)
+                        put("as_of", pt.asOf)
+                        put("fetched_at", pt.fetchedAt)
+                        pt.open?.let { put("open", it) }
+                        pt.high?.let { put("high", it) }
+                        pt.low?.let { put("low", it) }
+                        pt.close?.let { put("close", it) }
+                        pt.sampleCount?.let { put("sample_count", it) }
+                        pt.isComplete?.let { put("is_complete", it) }
+                    }
+                    ptsArray.put(ptObj)
+                }
+                put("points", ptsArray)
+            }
+
+            prefs.edit().apply {
+                putString(KEY_CACHED_HISTORY_JSON, root.toString())
+                putLong(KEY_CACHED_HISTORY_TIME, System.currentTimeMillis())
+                apply()
+            }
+        } catch (_: Exception) {
+            // Non-critical persistence failure
+        }
+    }
+
+    fun getCachedHistoryResponse(expectedRange: HistoryRange = HistoryRange.ONE_WEEK): HistoryResponseModel? {
+        val jsonStr = prefs.getString(KEY_CACHED_HISTORY_JSON, null) ?: return null
+        return try {
+            val json = JSONObject(jsonStr)
+            val rangeStr = json.optString("range", expectedRange.apiValue)
+            val range = HistoryRange.fromApiValue(rangeStr)
+            val status = json.optString("status", "empty")
+            val instrument = json.optString("instrument", "BRENT_CRUDE_USD")
+            val currency = json.optString("currency", "USD")
+            val unit = json.optString("unit", "USD / barrel")
+            val resolution = json.optString("resolution", "hourly")
+            val collectionStartDate = if (json.isNull("collection_start_date")) null else json.optString("collection_start_date")
+            val earliestTimestamp = if (json.isNull("earliest_timestamp")) null else json.optString("earliest_timestamp")
+            val latestTimestamp = if (json.isNull("latest_timestamp")) null else json.optString("latest_timestamp")
+            val count = json.optInt("count", 0)
+            val isPartial = json.optBoolean("is_partial", false)
+            val serverTime = json.optString("server_time", "")
+            val message = if (json.isNull("message")) null else json.optString("message")
+
+            val summaryObj = json.optJSONObject("summary")
+            val summary = if (summaryObj != null) {
+                HistorySummaryModel(
+                    firstPrice = summaryObj.optDouble("first_price", 0.0),
+                    latestPrice = summaryObj.optDouble("latest_price", 0.0),
+                    changeAbsolute = summaryObj.optDouble("change_absolute", 0.0),
+                    changePercent = summaryObj.optDouble("change_percent", 0.0),
+                    high = summaryObj.optDouble("high", 0.0),
+                    low = summaryObj.optDouble("low", 0.0)
+                )
+            } else null
+
+            val pointsArray = json.optJSONArray("points")
+            val pointsList = mutableListOf<HistoricalPointModel>()
+            if (pointsArray != null) {
+                for (i in 0 until pointsArray.length()) {
+                    val ptObj = pointsArray.optJSONObject(i) ?: continue
+                    pointsList.add(
+                        HistoricalPointModel(
+                            timestamp = ptObj.optString("timestamp", ""),
+                            timestampMs = ptObj.optLong("timestampMs", 0L),
+                            price = ptObj.optDouble("price", 0.0),
+                            formatted = ptObj.optString("formatted", ""),
+                            asOf = ptObj.optString("as_of", ""),
+                            fetchedAt = ptObj.optString("fetched_at", ""),
+                            open = if (ptObj.has("open") && !ptObj.isNull("open")) ptObj.optDouble("open") else null,
+                            high = if (ptObj.has("high") && !ptObj.isNull("high")) ptObj.optDouble("high") else null,
+                            low = if (ptObj.has("low") && !ptObj.isNull("low")) ptObj.optDouble("low") else null,
+                            close = if (ptObj.has("close") && !ptObj.isNull("close")) ptObj.optDouble("close") else null,
+                            sampleCount = if (ptObj.has("sample_count") && !ptObj.isNull("sample_count")) ptObj.optInt("sample_count") else null,
+                            isComplete = if (ptObj.has("is_complete") && !ptObj.isNull("is_complete")) ptObj.optBoolean("is_complete") else null
+                        )
+                    )
+                }
+            }
+
+            HistoryResponseModel(
+                status = status,
+                instrument = instrument,
+                currency = currency,
+                unit = unit,
+                range = range,
+                resolution = resolution,
+                collectionStartDate = collectionStartDate,
+                earliestTimestamp = earliestTimestamp,
+                latestTimestamp = latestTimestamp,
+                count = count,
+                points = pointsList,
+                summary = summary,
+                isPartial = isPartial,
+                serverTime = serverTime,
+                message = message
+            )
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    fun getCachedHistoryTimeMs(): Long {
+        return prefs.getLong(KEY_CACHED_HISTORY_TIME, 0L)
+    }
+
     fun clear() {
         prefs.edit().clear().apply()
     }
@@ -181,8 +339,11 @@ class HawklyxPreferences(context: Context) {
         private const val KEY_IS_SYNTHETIC = "is_synthetic"
         private const val KEY_SOURCE = "source"
         private const val KEY_STATUS = "status"
+        private const val KEY_MARKET_OPEN = "market_is_open"
         private const val KEY_NEXT_REFRESH_ALLOWED = "next_refresh_allowed"
         private const val KEY_LAST_FETCH_TIME = "last_fetch_time"
         private const val KEY_HISTORY = "history_json"
+        private const val KEY_CACHED_HISTORY_JSON = "cached_history_json"
+        private const val KEY_CACHED_HISTORY_TIME = "cached_history_time"
     }
 }

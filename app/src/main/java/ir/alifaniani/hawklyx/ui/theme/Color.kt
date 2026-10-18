@@ -17,3 +17,12 @@ val HawklyxTextMuted = Color(0xFF68756D)
 
 val HawklyxAmber = Color(0xFFE5B862)
 val HawklyxRed = Color(0xFFFF6B6B)
+
+// Restrained Financial Instrument Button Tokens
+val HawklyxButtonEmeraldContainer = Color(0xFF15281D)
+val HawklyxButtonEmeraldBorder = Color(0xFF2B523B)
+val HawklyxButtonDisabledContainer = Color(0xFF1A1F1C)
+val HawklyxButtonDisabledBorder = Color(0xFF242C26)
+val HawklyxButtonClosedContainer = Color(0xFF1E1C15)
+val HawklyxButtonClosedBorder = Color(0xFF3D351E)
+val HawklyxButtonClosedContent = Color(0xFFD4B36A)

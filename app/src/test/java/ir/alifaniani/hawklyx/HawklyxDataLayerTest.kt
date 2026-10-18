@@ -4,6 +4,7 @@ import ir.alifaniani.hawklyx.data.model.BrentPriceObservation
 import ir.alifaniani.hawklyx.data.model.DataFreshnessStatus
 import ir.alifaniani.hawklyx.data.model.PriceUiState
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -81,5 +82,36 @@ class HawklyxDataLayerTest {
         assertEquals(DataFreshnessStatus.QUOTA_EXHAUSTED, quotaExhaustedState.status)
         assertEquals(80.90, quotaExhaustedState.observation!!.price, 0.001)
         assertTrue(quotaExhaustedState.message.contains("Daily quota"))
+    }
+
+    @Test
+    fun stateTransition_onMarketClosed_preservesLastPriceAndMarksClosed() {
+        val lastObs = BrentPriceObservation(
+            price = 86.25,
+            formatted = "$86.25",
+            asOf = "2026-10-16T21:55:00Z",
+            fetchedAt = "2026-10-18T14:10:00Z"
+        )
+
+        val marketClosedState = PriceUiState(
+            observation = lastObs,
+            status = DataFreshnessStatus.MARKET_CLOSED,
+            message = "Market closed for weekend. Showing latest available price.",
+            marketState = ir.alifaniani.hawklyx.data.model.MarketStateModel(
+                isOpen = false,
+                status = "closed",
+                session = "weekend_closed",
+                nextOpenAt = "2026-10-18T22:00:00Z",
+                description = "Weekend closure"
+            )
+        )
+
+        assertEquals(DataFreshnessStatus.MARKET_CLOSED, marketClosedState.status)
+        assertTrue(marketClosedState.isMarketClosed)
+        assertNotNull(marketClosedState.observation)
+        assertEquals(86.25, marketClosedState.observation!!.price, 0.001)
+        assertNotNull(marketClosedState.marketState)
+        assertFalse(marketClosedState.marketState!!.isOpen)
+        assertTrue(marketClosedState.message.contains("Market closed"))
     }
 }

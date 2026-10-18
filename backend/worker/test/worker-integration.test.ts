@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HawklyxCoordinator } from "../src/coordinator";
 import worker from "../src/index";
 import { Env, HawklyxPriceResponse, HealthStatusResponse } from "../src/types";
@@ -21,13 +21,19 @@ describe("Worker Endpoints Integration", () => {
 
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    // Default test fixture: Wednesday 14:00 UTC (active trading window)
+    vi.setSystemTime(new Date("2026-10-14T14:00:00Z"));
+
     baseEnv = {
       OILPRICEAPI_KEY_1: "test_key_1",
       OILPRICEAPI_KEY_2: "test_key_2",
       DEFAULT_UPSTREAM_INTERVAL_MINUTES: "15",
       MANUAL_REFRESH_COOLDOWN_SECONDS: "180",
       MAX_DAILY_QUOTA_PER_ACCOUNT: "50",
-      GLOBAL_DAILY_BUDGET: "200",
+      GLOBAL_DAILY_BUDGET: "250",
+      AUTOMATIC_RESERVE_BUDGET: "110",
+      MANUAL_BUDGET_CAP: "140",
     };
 
     const storage = new MockSqlStorageEngine();
@@ -38,6 +44,10 @@ describe("Worker Endpoints Integration", () => {
       ...baseEnv,
       COORDINATOR: createDOBinding(coordinator),
     };
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("fails closed with 503 when COORDINATOR binding is completely missing", async () => {

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { HawklyxCoordinator } from "../src/coordinator";
 import { Env } from "../src/types";
 import {
@@ -13,6 +13,10 @@ describe("HawklyxCoordinator Durable Object", () => {
 
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    // Default test fixture: Wednesday 14:00 UTC (active trading window)
+    vi.setSystemTime(new Date("2026-10-14T14:00:00Z"));
+
     storageEngine = new MockSqlStorageEngine();
     mockEnv = {
       OILPRICEAPI_KEY_1: "key_alpha",
@@ -20,10 +24,16 @@ describe("HawklyxCoordinator Durable Object", () => {
       DEFAULT_UPSTREAM_INTERVAL_MINUTES: "15",
       MANUAL_REFRESH_COOLDOWN_SECONDS: "180",
       MAX_DAILY_QUOTA_PER_ACCOUNT: "50",
-      GLOBAL_DAILY_BUDGET: "200",
+      GLOBAL_DAILY_BUDGET: "250",
+      AUTOMATIC_RESERVE_BUDGET: "110",
+      MANUAL_BUDGET_CAP: "140",
       PRICE_SANITY_MIN: "10",
       PRICE_SANITY_MAX: "250",
     };
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("coalesces concurrent requests so only a single upstream fetch occurs", async () => {
@@ -269,6 +279,8 @@ describe("HawklyxCoordinator Durable Object", () => {
       const tightEnv: Env = {
         ...mockEnv,
         GLOBAL_DAILY_BUDGET: "2",
+        AUTOMATIC_RESERVE_BUDGET: "1",
+        MANUAL_BUDGET_CAP: "1",
       };
 
       const state = createMockDurableObjectState(storageEngine);
@@ -297,7 +309,7 @@ describe("HawklyxCoordinator Durable Object", () => {
       expect(res3.status).toBe(200);
       expect(res3.body.status).toBe("quota_exhausted");
       expect(res3.body.data?.price).toBe(81.0);
-      expect(res3.body.message).toContain("quota");
+      expect(res3.body.message.toLowerCase()).toMatch(/quota|limit/);
 
       // Verify no secrets leaked in response or health
       const serialized = JSON.stringify(res3) + JSON.stringify(health);
@@ -328,5 +340,99 @@ describe("HawklyxCoordinator Durable Object", () => {
     expect(health.accounts[0].used_today).toBe(0);
     expect(health.accounts[0].active).toBe(true);
     expect(storageEngine.systemState.get("last_reset_day")).toBe(new Date().toISOString().slice(0, 10));
+  });
+
+  it("protects 110-request automatic reserve: blocks manual requests when 140 cap reached while automatic requests succeed", async () => {
+    let upstreamCallCount = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockImplementation(async () => {
+      upstreamCallCount++;
+      return new Response(JSON.stringify(sampleValidPriceResponse(83.5)), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+
+    try {
+      // Seed storage with manual cap exhausted: 140 manual requests used, 10 automatic used
+      storageEngine.systemState.set("manual_used_today", "140");
+      storageEngine.systemState.set("automatic_used_today", "10");
+      storageEngine.systemState.set("last_reset_day", "2026-10-14");
+      // Add existing observation
+      storageEngine.observations.set("last_known_good", {
+        key: "last_known_good",
+        data: JSON.stringify(sampleValidPriceResponse(82.0).data),
+        updated_at: Date.now() - 600000,
+      });
+
+      const state = createMockDurableObjectState(storageEngine);
+      const coordinator = new HawklyxCoordinator(state, mockEnv);
+
+      // Manual request must be rejected to protect automatic reserve
+      const manualRes = await coordinator.handlePriceRequest({ force: true, requestClass: "manual" });
+      expect(manualRes.status).toBe(200);
+      expect(manualRes.body.status).toBe("quota_exhausted");
+      expect(manualRes.body.message).toContain("Manual refresh limit reached for today");
+      expect(manualRes.body.data?.price).toBe(82.0);
+      expect(upstreamCallCount).toBe(0); // Upstream not called for blocked manual request
+
+      // Automatic request must STILL succeed because automatic reserve (110) is untouched!
+      storageEngine.systemState.set("last_upstream_attempt_ms", "0");
+      const autoRes = await coordinator.handlePriceRequest({ requestClass: "automatic" });
+      expect(autoRes.status).toBe(200);
+      expect(autoRes.body.status).toBe("fresh");
+      expect(autoRes.body.data?.price).toBe(83.5);
+      expect(upstreamCallCount).toBe(1);
+
+      // Verify health stats reflect separate tracking
+      const health = await coordinator.getHealth();
+      expect(health.manual_requests_today).toBe(140);
+      expect(health.automatic_requests_today).toBe(11);
+      expect(health.total_requests_today).toBe(151);
+      expect(health.daily_budget).toBe(250);
+      expect(health.automatic_reserve).toBe(110);
+      expect(health.manual_budget_cap).toBe(140);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("skips upstream call during market closure on automatic requests, strictly preserving quota", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockImplementation(async () => {
+      throw new Error("Upstream fetch must NOT be called when market is closed!");
+    });
+
+    try {
+      // Set time to Saturday noon (market completely closed)
+      vi.setSystemTime(new Date("2026-10-17T12:00:00Z"));
+
+      storageEngine.systemState.set("last_reset_day", "2026-10-17");
+      storageEngine.observations.set("last_known_good", {
+        key: "last_known_good",
+        data: JSON.stringify(sampleValidPriceResponse(86.25).data),
+        updated_at: new Date("2026-10-16T21:55:00Z").getTime(),
+      });
+
+      const state = createMockDurableObjectState(storageEngine);
+      const coordinator = new HawklyxCoordinator(state, mockEnv);
+
+      // Automatic scheduled request arrives
+      const res = await coordinator.handlePriceRequest({ requestClass: "automatic" });
+
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe("market_closed");
+      expect(res.body.data?.price).toBe(86.25);
+      expect(res.body.market?.is_open).toBe(false);
+      expect(res.body.market?.session).toBe("weekend_closed");
+      expect(res.body.message).toContain("Showing latest available price");
+
+      // Verify 0 upstream requests were consumed
+      const health = await coordinator.getHealth();
+      expect(health.total_requests_today).toBe(0);
+      expect(health.automatic_requests_today).toBe(0);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });

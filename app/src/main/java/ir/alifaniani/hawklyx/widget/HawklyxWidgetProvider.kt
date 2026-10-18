@@ -14,14 +14,17 @@ import ir.alifaniani.hawklyx.data.local.HawklyxPreferences
 import ir.alifaniani.hawklyx.data.model.BrentPriceObservation
 import ir.alifaniani.hawklyx.data.model.DataFreshnessStatus
 import ir.alifaniani.hawklyx.data.repository.HawklyxRepository
+import ir.alifaniani.hawklyx.data.model.HistoryRange
+import ir.alifaniani.hawklyx.domain.HistoricalPoint
+import ir.alifaniani.hawklyx.domain.PriceChange24h
+import ir.alifaniani.hawklyx.domain.PriceChangeCalculator
+import ir.alifaniani.hawklyx.domain.PriceChangeDirection
+import ir.alifaniani.hawklyx.util.HawklyxTimeUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 /**
  * Android Home-Screen Widget Provider for HAWKLYX.
@@ -47,36 +50,7 @@ class HawklyxWidgetProvider : AppWidgetProvider() {
         super.onReceive(context, intent)
 
         if (intent.action == ACTION_REFRESH) {
-            val appWidgetManager = AppWidgetManager.getInstance(context)
-            val thisWidget = ComponentName(context, HawklyxWidgetProvider::class.java)
-            val allIds = appWidgetManager.getAppWidgetIds(thisWidget)
-            val prefs = HawklyxPreferences(context)
-            val observation = prefs.getLastObservation()
-            val now = System.currentTimeMillis()
-            val nextAllowed = prefs.getNextRefreshAllowedTimeMs()
-
-            // Respect 3-minute manual cooldown in widget
-            if (now < nextAllowed) {
-                val remainingSec = ((nextAllowed - now) / 1000).toInt().coerceAtLeast(1)
-                for (id in allIds) {
-                    val views = RemoteViews(context.packageName, R.layout.hawklyx_widget_layout)
-                    setupClickIntents(context, views, id)
-                    bindWidgetContent(context, views, observation, prefs.getLastStatus(), isRefreshing = false)
-                    views.setTextViewText(R.id.widget_status_msg, "Cooldown (${remainingSec}s)")
-                    appWidgetManager.updateAppWidget(id, views)
-                }
-                return
-            }
-
-            // Immediately reflect refreshing state on screen
-            for (id in allIds) {
-                updateWidget(context, appWidgetManager, id, observation, DataFreshnessStatus.REFRESHING, isRefreshing = true)
-            }
-
-            // Asynchronously execute refresh via repository
-            CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
-                HawklyxRepository.getInstance(context).refreshPrice(force = true)
-            }
+            HawklyxWidgetCoordinator.handleRefreshAction(context)
         }
     }
 
@@ -93,6 +67,37 @@ class HawklyxWidgetProvider : AppWidgetProvider() {
                 val status = prefs.getLastStatus()
                 for (id in appWidgetIds) {
                     updateWidget(context, appWidgetManager, id, observation, status, isRefreshing = false)
+                }
+            }
+        }
+
+        fun updateRefreshingState(context: Context, isRefreshing: Boolean) {
+            val appWidgetManager = AppWidgetManager.getInstance(context)
+            val thisWidget = ComponentName(context, HawklyxWidgetProvider::class.java)
+            val appWidgetIds = appWidgetManager.getAppWidgetIds(thisWidget)
+            if (appWidgetIds.isNotEmpty()) {
+                val prefs = HawklyxPreferences(context)
+                val observation = prefs.getLastObservation()
+                val status = if (isRefreshing) DataFreshnessStatus.REFRESHING else prefs.getLastStatus()
+                for (id in appWidgetIds) {
+                    updateWidget(context, appWidgetManager, id, observation, status, isRefreshing = isRefreshing)
+                }
+            }
+        }
+
+        fun showCooldown(context: Context, remainingSeconds: Int) {
+            val appWidgetManager = AppWidgetManager.getInstance(context)
+            val thisWidget = ComponentName(context, HawklyxWidgetProvider::class.java)
+            val appWidgetIds = appWidgetManager.getAppWidgetIds(thisWidget)
+            if (appWidgetIds.isNotEmpty()) {
+                val prefs = HawklyxPreferences(context)
+                val observation = prefs.getLastObservation()
+                for (id in appWidgetIds) {
+                    val views = RemoteViews(context.packageName, R.layout.hawklyx_widget_layout)
+                    setupClickIntents(context, views, id)
+                    bindWidgetContent(context, views, observation, prefs.getLastStatus(), isRefreshing = false)
+                    views.setTextViewText(R.id.widget_status_msg, "Cooldown (${remainingSeconds}s)")
+                    appWidgetManager.updateAppWidget(id, views)
                 }
             }
         }
@@ -144,69 +149,74 @@ class HawklyxWidgetProvider : AppWidgetProvider() {
             status: DataFreshnessStatus,
             isRefreshing: Boolean
         ) {
-            // Price & Currency display
+            val prefs = HawklyxPreferences(context)
+            val isMarketOpen = prefs.isMarketOpen()
+            val theme = WidgetThemeResolver.resolve(
+                status = status,
+                observation = observation,
+                isMarketOpen = isMarketOpen,
+                isRefreshing = isRefreshing
+            )
+
+            // 1. Dominant Price & Currency display
             if (observation != null) {
                 views.setTextViewText(R.id.widget_price, observation.formatted)
+                views.setTextColor(R.id.widget_price, ContextCompat.getColor(context, theme.priceColorRes))
                 views.setTextViewText(R.id.widget_unit, observation.unit)
                 val formattedTime = formatObservationTime(observation.asOf)
                 views.setTextViewText(R.id.widget_updated, "Observed: $formattedTime")
             } else {
                 views.setTextViewText(R.id.widget_price, "--.--")
+                views.setTextColor(R.id.widget_price, ContextCompat.getColor(context, theme.priceColorRes))
                 views.setTextViewText(R.id.widget_unit, context.getString(R.string.unit_usd_bbl))
                 views.setTextViewText(R.id.widget_updated, "Awaiting first sync")
             }
 
-            // Status Badge & Footer
-            if (isRefreshing) {
-                views.setTextViewText(R.id.widget_status_badge, context.getString(R.string.status_refreshing))
-                views.setTextColor(R.id.widget_status_badge, ContextCompat.getColor(context, R.color.hawklyx_emerald))
-                views.setTextViewText(R.id.widget_status_msg, "Syncing...")
+            // 2. Status Badge with dynamic semantic background & text color
+            views.setTextViewText(R.id.widget_status_badge, theme.badgeText)
+            views.setTextColor(R.id.widget_status_badge, ContextCompat.getColor(context, theme.badgeTextColorRes))
+            views.setInt(R.id.widget_status_badge, "setBackgroundResource", theme.badgeBgRes)
+
+            // Calculate 24-hour price change from available history
+            val allPoints = mutableListOf<HistoricalPoint>()
+            prefs.getCachedHistoryResponse(HistoryRange.ONE_WEEK)?.points?.let { allPoints.addAll(it) }
+            allPoints.addAll(prefs.getHistoricalPoints())
+            val currentTs = if (observation != null && observation.asOf.isNotBlank()) {
+                try { Instant.parse(observation.asOf).toEpochMilli() } catch (_: Exception) { System.currentTimeMillis() }
+            } else System.currentTimeMillis()
+            val priceChange = if (observation != null) {
+                PriceChangeCalculator.calculate24hChange(observation.price, currentTs, allPoints)
             } else {
-                when (status) {
-                    DataFreshnessStatus.FRESH -> {
-                        views.setTextViewText(R.id.widget_status_badge, context.getString(R.string.status_fresh))
-                        views.setTextColor(R.id.widget_status_badge, ContextCompat.getColor(context, R.color.hawklyx_emerald))
-                        views.setTextViewText(R.id.widget_status_msg, context.getString(R.string.tap_to_refresh))
-                    }
-                    DataFreshnessStatus.STALE -> {
-                        views.setTextViewText(R.id.widget_status_badge, context.getString(R.string.status_stale))
-                        views.setTextColor(R.id.widget_status_badge, ContextCompat.getColor(context, R.color.hawklyx_amber))
-                        views.setTextViewText(R.id.widget_status_msg, context.getString(R.string.tap_to_refresh))
-                    }
-                    DataFreshnessStatus.QUOTA_EXHAUSTED -> {
-                        views.setTextViewText(R.id.widget_status_badge, context.getString(R.string.status_quota_limit))
-                        views.setTextColor(R.id.widget_status_badge, ContextCompat.getColor(context, R.color.hawklyx_red))
-                        views.setTextViewText(R.id.widget_status_msg, "Daily limit")
-                    }
-                    DataFreshnessStatus.PROVIDER_UNAVAILABLE, DataFreshnessStatus.INVALID_RESPONSE -> {
-                        views.setTextViewText(R.id.widget_status_badge, context.getString(R.string.status_unavailable))
-                        views.setTextColor(R.id.widget_status_badge, ContextCompat.getColor(context, R.color.hawklyx_amber))
-                        views.setTextViewText(R.id.widget_status_msg, "Offline")
-                    }
-                    DataFreshnessStatus.NO_DATA -> {
-                        views.setTextViewText(R.id.widget_status_badge, context.getString(R.string.status_no_data))
-                        views.setTextColor(R.id.widget_status_badge, ContextCompat.getColor(context, R.color.hawklyx_text_muted))
-                        views.setTextViewText(R.id.widget_status_msg, context.getString(R.string.tap_to_refresh))
-                    }
-                    DataFreshnessStatus.REFRESHING -> {
-                        views.setTextViewText(R.id.widget_status_badge, context.getString(R.string.status_refreshing))
-                        views.setTextColor(R.id.widget_status_badge, ContextCompat.getColor(context, R.color.hawklyx_emerald))
-                        views.setTextViewText(R.id.widget_status_msg, "Syncing...")
-                    }
-                }
+                PriceChange24h.unavailable()
             }
+
+            // 3. Cadence / Market State Pill
+            if (priceChange.isAvailable && !theme.isMarketClosed) {
+                views.setTextViewText(R.id.widget_cadence_pill, "24h ${priceChange.formattedPercentage}")
+                val changeColorRes = when (priceChange.direction) {
+                    PriceChangeDirection.POSITIVE -> R.color.hawklyx_emerald
+                    PriceChangeDirection.NEGATIVE -> R.color.hawklyx_red
+                    PriceChangeDirection.NEUTRAL -> R.color.hawklyx_text_secondary
+                }
+                views.setTextColor(R.id.widget_cadence_pill, ContextCompat.getColor(context, changeColorRes))
+            } else {
+                views.setTextViewText(R.id.widget_cadence_pill, theme.cadencePillText)
+                val cadencePillColor = if (theme.isMarketClosed) R.color.hawklyx_amber else R.color.hawklyx_text_secondary
+                views.setTextColor(R.id.widget_cadence_pill, ContextCompat.getColor(context, cadencePillColor))
+            }
+
+            // 4. Status message with 24h change context if market is closed
+            val finalStatusMsg = if (priceChange.isAvailable && theme.isMarketClosed) {
+                "24h: ${priceChange.formattedWithArrow} • ${theme.statusMessage}"
+            } else {
+                theme.statusMessage
+            }
+            views.setTextViewText(R.id.widget_status_msg, finalStatusMsg)
         }
 
         private fun formatObservationTime(asOfIso: String): String {
             if (asOfIso.isBlank()) return "Recently"
-            return try {
-                val instant = Instant.parse(asOfIso)
-                val formatter = DateTimeFormatter.ofPattern("HH:mm (z)", Locale.getDefault())
-                    .withZone(ZoneId.systemDefault())
-                formatter.format(instant)
-            } catch (_: Exception) {
-                asOfIso.take(16).replace("T", " ")
-            }
+            return HawklyxTimeUtils.formatIsoToShortTime(asOfIso)
         }
     }
 }

@@ -12,6 +12,18 @@
     <color name="hawklyx_text_muted">#68756D</color>
     <color name="hawklyx_amber">#E5B862</color>
     <color name="hawklyx_red">#FF6B6B</color>
+    <color name="hawklyx_chart_grid">#1C241F</color>
+    <color name="hawklyx_chart_gradient_top">#3062E59A</color>
+    <color name="hawklyx_chart_gradient_bottom">#0062E59A</color>
+    <color name="hawklyx_badge_emerald_bg">#15281D</color>
+    <color name="hawklyx_badge_emerald_border">#2B523B</color>
+    <color name="hawklyx_badge_amber_bg">#231F15</color>
+    <color name="hawklyx_badge_amber_border">#42371E</color>
+    <color name="hawklyx_badge_red_bg">#281616</color>
+    <color name="hawklyx_badge_red_border">#4D2020</color>
+    <color name="hawklyx_badge_neutral_bg">#1E221F</color>
+    <color name="hawklyx_badge_neutral_border">#2A322C</color>
+    <color name="hawklyx_amber_glow">#20E5B862</color>
 
     <!-- Legacy / compatibility colors -->
     <color name="purple_200">#FFBB86FC</color>

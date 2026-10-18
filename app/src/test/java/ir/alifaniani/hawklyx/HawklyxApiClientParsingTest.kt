@@ -193,6 +193,46 @@ class HawklyxApiClientParsingTest {
     }
 
     @Test
+    fun parseResponseBody_marketClosedResponse_parsesCorrectly() {
+        val payload = """
+            {
+              "status": "market_closed",
+              "data": {
+                "code": "BRENT_CRUDE_USD",
+                "price": 86.25,
+                "formatted": "$86.25",
+                "as_of": "2026-10-16T21:55:00.000Z",
+                "fetched_at": "2026-10-18T14:10:00.000Z",
+                "is_stale": false,
+                "is_synthetic": false
+              },
+              "message": "Market closed for weekend (Friday 22:00 London close). Showing latest available price.",
+              "next_refresh_allowed_at": "2026-10-18T14:13:00.000Z",
+              "market": {
+                "is_open": false,
+                "status": "closed",
+                "session": "weekend_closed",
+                "next_open_at": "2026-10-18T22:00:00.000Z",
+                "description": "Market closed for weekend."
+              }
+            }
+        """.trimIndent()
+
+        val result = client.parseResponseBody(payload, 200, 95L)
+        assertTrue(result.isSuccess)
+        val response = result.getOrThrow()
+
+        assertEquals(DataFreshnessStatus.MARKET_CLOSED, response.status)
+        assertNotNull(response.observation)
+        assertEquals(86.25, response.observation!!.price, 0.001)
+        assertNotNull(response.marketState)
+        assertFalse(response.marketState!!.isOpen)
+        assertEquals("closed", response.marketState!!.status)
+        assertEquals("weekend_closed", response.marketState!!.session)
+        assertEquals("2026-10-18T22:00:00.000Z", response.marketState!!.nextOpenAt)
+    }
+
+    @Test
     fun parseResponseBody_malformedJson_failsWithParseException() {
         val malformed = client.parseResponseBody("{ invalid_json: true ", 200)
         assertTrue(malformed.isFailure)

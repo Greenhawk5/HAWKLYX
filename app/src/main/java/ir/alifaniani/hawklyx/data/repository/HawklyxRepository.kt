@@ -4,10 +4,17 @@ import android.content.Context
 import ir.alifaniani.hawklyx.data.local.HawklyxPreferences
 import ir.alifaniani.hawklyx.data.model.BrentPriceObservation
 import ir.alifaniani.hawklyx.data.model.DataFreshnessStatus
+import ir.alifaniani.hawklyx.data.model.HistoricalObservationPoint
+import ir.alifaniani.hawklyx.data.model.HistoryRange
+import ir.alifaniani.hawklyx.data.model.HistoryResponseModel
+import ir.alifaniani.hawklyx.data.model.HistoryUiState
 import ir.alifaniani.hawklyx.data.model.PriceUiState
 import ir.alifaniani.hawklyx.data.remote.HawklyxApiClient
 import ir.alifaniani.hawklyx.data.schedule.UtcRefreshSchedule
-import ir.alifaniani.hawklyx.widget.HawklyxWidgetProvider
+import ir.alifaniani.hawklyx.widget.HawklyxWidgetCoordinator
+import ir.alifaniani.hawklyx.domain.HistoricalPoint
+import ir.alifaniani.hawklyx.domain.PriceChange24h
+import ir.alifaniani.hawklyx.domain.PriceChangeCalculator
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,6 +24,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.time.Instant
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Single source of truth for Brent Crude price data.
@@ -34,6 +43,45 @@ class HawklyxRepository(
     private val _uiState = MutableStateFlow(loadInitialState())
     val uiState: StateFlow<PriceUiState> = _uiState.asStateFlow()
 
+    private val _historyUiState = MutableStateFlow(HistoryUiState())
+    val historyUiState: StateFlow<HistoryUiState> = _historyUiState.asStateFlow()
+
+    private data class HistoryCacheEntry(
+        val response: HistoryResponseModel,
+        val cachedAtMs: Long
+    )
+    private val historyCache = ConcurrentHashMap<HistoryRange, HistoryCacheEntry>()
+    private val historyMutex = Mutex()
+    @Volatile
+    private var activeHistoryRange: HistoryRange = HistoryRange.ONE_MONTH
+
+    private fun computePriceChange(
+        observation: BrentPriceObservation?,
+        localHistory: List<HistoricalObservationPoint>,
+        fallbackNowMs: Long
+    ): PriceChange24h {
+        if (observation == null || observation.price <= 0.0) {
+            return PriceChange24h.unavailable()
+        }
+        val currentTimestampMs = if (observation.asOf.isNotBlank()) {
+            try { Instant.parse(observation.asOf).toEpochMilli() } catch (_: Exception) { fallbackNowMs }
+        } else {
+            fallbackNowMs
+        }
+
+        val allPoints = mutableListOf<HistoricalPoint>()
+        preferences.getCachedHistoryResponse(HistoryRange.ONE_WEEK)?.points?.let {
+            allPoints.addAll(it)
+        }
+        allPoints.addAll(localHistory)
+
+        return PriceChangeCalculator.calculate24hChange(
+            currentPrice = observation.price,
+            currentTimestampMs = currentTimestampMs,
+            points = allPoints
+        )
+    }
+
     private fun loadInitialState(): PriceUiState {
         val cached = preferences.getLastObservation()
         val status = preferences.getLastStatus()
@@ -44,6 +92,7 @@ class HawklyxRepository(
         val cooldownSec = if (nextRefresh > now) ((nextRefresh - now) / 1000).toInt() else 0
         val nextCadenceMs = UtcRefreshSchedule.calculateNextCadenceEpochMs(now)
         val cadenceSec = UtcRefreshSchedule.getRemainingSeconds(now)
+        val priceChange = computePriceChange(cached, history, now)
 
         return if (cached != null) {
             PriceUiState(
@@ -57,7 +106,8 @@ class HawklyxRepository(
                 cadenceRemainingSeconds = cadenceSec,
                 history = history,
                 lastSyncAttemptTimeMs = preferences.getLastFetchTimeMs(),
-                lastSyncSuccess = true
+                lastSyncSuccess = true,
+                priceChange24h = priceChange
             )
         } else {
             PriceUiState(
@@ -71,7 +121,8 @@ class HawklyxRepository(
                 cadenceRemainingSeconds = cadenceSec,
                 history = history,
                 lastSyncAttemptTimeMs = 0L,
-                lastSyncSuccess = false
+                lastSyncSuccess = false,
+                priceChange24h = PriceChange24h.unavailable()
             )
         }
     }
@@ -125,7 +176,7 @@ class HawklyxRepository(
                         message = "Retrieving Brent crude price from edge service..."
                     )
                 }
-                HawklyxWidgetProvider.notifyDataChanged(context)
+                HawklyxWidgetCoordinator.notifyAllWidgets(context)
 
                 val result = apiClient.fetchLatestPrice(force)
                 result.fold(
@@ -137,9 +188,12 @@ class HawklyxRepository(
                         val cadenceSec = UtcRefreshSchedule.getRemainingSeconds(now)
                         val cooldownSec = if (nextTime > now) ((nextTime - now) / 1000).toInt() else 0
 
+                        val isMarketOpen = networkResponse.marketState?.isOpen ?: (status != DataFreshnessStatus.MARKET_CLOSED)
+
                         if (obs != null) {
-                            preferences.saveObservation(obs, status, nextTime)
+                            preferences.saveObservation(obs, status, nextTime, isMarketOpen)
                             val updatedHistory = preferences.getHistoricalPoints()
+                            val priceChange = computePriceChange(obs, updatedHistory, now)
 
                             _uiState.update {
                                 PriceUiState(
@@ -153,14 +207,17 @@ class HawklyxRepository(
                                     cadenceRemainingSeconds = cadenceSec,
                                     history = updatedHistory,
                                     lastSyncAttemptTimeMs = now,
-                                    lastSyncSuccess = true
+                                    lastSyncSuccess = true,
+                                    marketState = networkResponse.marketState,
+                                    priceChange24h = priceChange
                                 )
                             }
                         } else {
                             // Upstream returned response without observation (e.g. provider error or empty data)
                             val lastObs = preferences.getLastObservation()
-                            preferences.saveStatusOnly(status, nextTime)
+                            preferences.saveStatusOnly(status, nextTime, isMarketOpen)
                             val updatedHistory = preferences.getHistoricalPoints()
+                            val priceChange = computePriceChange(lastObs, updatedHistory, now)
 
                             _uiState.update {
                                 PriceUiState(
@@ -174,7 +231,9 @@ class HawklyxRepository(
                                     cadenceRemainingSeconds = cadenceSec,
                                     history = updatedHistory,
                                     lastSyncAttemptTimeMs = now,
-                                    lastSyncSuccess = false
+                                    lastSyncSuccess = false,
+                                    marketState = networkResponse.marketState,
+                                    priceChange24h = priceChange
                                 )
                             }
                         }
@@ -194,8 +253,9 @@ class HawklyxRepository(
                         val nextCadence = UtcRefreshSchedule.calculateNextCadenceEpochMs(now)
                         val cadenceSec = UtcRefreshSchedule.getRemainingSeconds(now)
                         val cooldownSec = if (nextAllowedTime > now) ((nextAllowedTime - now) / 1000).toInt() else 0
+                        val priceChange = computePriceChange(lastObs, updatedHistory, now)
 
-                        _uiState.update {
+                        _uiState.update { current ->
                             PriceUiState(
                                 observation = lastObs,
                                 status = fallbackStatus,
@@ -207,19 +267,124 @@ class HawklyxRepository(
                                 cadenceRemainingSeconds = cadenceSec,
                                 history = updatedHistory,
                                 lastSyncAttemptTimeMs = now,
-                                lastSyncSuccess = false
+                                lastSyncSuccess = false,
+                                marketState = current.marketState,
+                                priceChange24h = priceChange
                             )
                         }
                     }
                 )
 
-                HawklyxWidgetProvider.notifyDataChanged(context)
+                if (HawklyxWidgetCoordinator.hasIntelligenceWidgets(context)) {
+                    loadHistory(HistoryRange.ONE_WEEK, forceRefresh = false)
+                }
+                HawklyxWidgetCoordinator.notifyAllWidgets(context)
                 _uiState.value
             }
         }
     }
 
+    /**
+     * Loads historical Brent crude prices for the specified range.
+     * Implements in-memory TTL caching (5 minutes), prevents duplicate in-flight requests,
+     * and handles rapid range switching safely by only applying the latest requested range.
+     * Strictly preserves cached data on network failures, marking it as stale.
+     */
+    suspend fun loadHistory(range: HistoryRange, forceRefresh: Boolean = false): HistoryUiState {
+        return withContext(ioDispatcher) {
+            activeHistoryRange = range
+            val now = System.currentTimeMillis()
+            val cached = historyCache[range]
+            val isCacheFresh = cached != null && (now - cached.cachedAtMs < HISTORY_CACHE_TTL_MS)
+
+            // Return cached response immediately if fresh and not forced
+            if (isCacheFresh && !forceRefresh) {
+                _historyUiState.update {
+                    it.copy(
+                        selectedRange = range,
+                        isLoading = false,
+                        isStale = false,
+                        data = cached!!.response,
+                        errorMessage = null
+                    )
+                }
+                return@withContext _historyUiState.value
+            }
+
+            // Immediately show loading state while preserving previous data if available
+            _historyUiState.update { current ->
+                val existingData = cached?.response ?: if (current.selectedRange == range) current.data else null
+                current.copy(
+                    selectedRange = range,
+                    isLoading = true,
+                    isStale = false,
+                    data = existingData,
+                    errorMessage = null
+                )
+            }
+
+            historyMutex.withLock {
+                // Ensure active range didn't change while waiting for lock
+                if (activeHistoryRange != range) {
+                    return@withLock _historyUiState.value
+                }
+
+                val result = apiClient.fetchHistory(range = range)
+                result.fold(
+                    onSuccess = { response ->
+                        historyCache[range] = HistoryCacheEntry(response, System.currentTimeMillis())
+                        if (range == HistoryRange.ONE_WEEK) {
+                            preferences.saveCachedHistoryResponse(response)
+                            _uiState.update { current ->
+                                current.copy(
+                                    priceChange24h = computePriceChange(
+                                        current.observation,
+                                        current.history,
+                                        System.currentTimeMillis()
+                                    )
+                                )
+                            }
+                            HawklyxWidgetCoordinator.notifyAllWidgets(context)
+                        }
+                        if (activeHistoryRange == range) {
+                            _historyUiState.update {
+                                it.copy(
+                                    selectedRange = range,
+                                    isLoading = false,
+                                    isStale = false,
+                                    data = response,
+                                    errorMessage = null
+                                )
+                            }
+                        }
+                    },
+                    onFailure = { error ->
+                        val persistentCached = if (range == HistoryRange.ONE_WEEK) preferences.getCachedHistoryResponse(range) else null
+                        if (activeHistoryRange == range) {
+                            _historyUiState.update { current ->
+                                val fallback = cached?.response ?: persistentCached ?: current.data
+                                current.copy(
+                                    selectedRange = range,
+                                    isLoading = false,
+                                    isStale = fallback != null,
+                                    data = fallback,
+                                    errorMessage = if (fallback != null) {
+                                        "Displaying cached history (offline: ${error.message})"
+                                    } else {
+                                        "Could not load market history: ${error.message}"
+                                    }
+                                )
+                            }
+                        }
+                    }
+                )
+                _historyUiState.value
+            }
+        }
+    }
+
     companion object {
+        const val HISTORY_CACHE_TTL_MS = 300_000L // 5 minutes in-memory TTL
         @Volatile
         private var instance: HawklyxRepository? = null
 

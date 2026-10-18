@@ -15,7 +15,11 @@ export interface AccountState {
 export class AccountPoolManager {
   private accounts: AccountState[] = [];
   private lastResetDay: string = "";
-  private globalDailyBudget: number = 200;
+  private globalDailyBudget: number = 250;
+  private automaticReserveBudget: number = 110;
+  private manualBudgetCap: number = 140;
+  private automaticUsedToday: number = 0;
+  private manualUsedToday: number = 0;
   private defaultAccountQuota: number = 50;
 
   constructor(env: Env) {
@@ -25,7 +29,12 @@ export class AccountPoolManager {
   public initFromEnv(env: Env): void {
     this.accounts = [];
     this.defaultAccountQuota = parseInt(env.MAX_DAILY_QUOTA_PER_ACCOUNT || "50", 10);
-    this.globalDailyBudget = parseInt(env.GLOBAL_DAILY_BUDGET || "200", 10);
+    this.globalDailyBudget = parseInt(env.GLOBAL_DAILY_BUDGET || "250", 10);
+    this.automaticReserveBudget = parseInt(env.AUTOMATIC_RESERVE_BUDGET || "110", 10);
+    this.manualBudgetCap = parseInt(
+      env.MANUAL_BUDGET_CAP || String(Math.max(0, this.globalDailyBudget - this.automaticReserveBudget)),
+      10
+    );
 
     const keys = [
       env.OILPRICEAPI_KEY_1,
@@ -64,6 +73,8 @@ export class AccountPoolManager {
     const currentDay = this.getUtcDayString(now);
     if (this.lastResetDay !== currentDay) {
       this.lastResetDay = currentDay;
+      this.automaticUsedToday = 0;
+      this.manualUsedToday = 0;
       for (const acc of this.accounts) {
         acc.usedToday = 0;
         // Unquarantine if previously exhausted by daily quota
@@ -80,7 +91,29 @@ export class AccountPoolManager {
    */
   public getTotalUsedToday(): number {
     this.checkDayReset();
-    return this.accounts.reduce((sum, acc) => sum + acc.usedToday, 0);
+    return this.automaticUsedToday + this.manualUsedToday;
+  }
+
+  public getAutomaticUsedToday(): number {
+    this.checkDayReset();
+    return this.automaticUsedToday;
+  }
+
+  public getManualUsedToday(): number {
+    this.checkDayReset();
+    return this.manualUsedToday;
+  }
+
+  public getAutomaticReserveBudget(): number {
+    return this.automaticReserveBudget;
+  }
+
+  public getManualBudgetCap(): number {
+    return this.manualBudgetCap;
+  }
+
+  public getGlobalDailyBudget(): number {
+    return this.globalDailyBudget;
   }
 
   /**
@@ -91,13 +124,41 @@ export class AccountPoolManager {
   }
 
   /**
-   * Selects the next eligible account using least-used, then oldest-used strategy.
-   * Returns null if no eligible account is available or global budget is exhausted.
+   * Manual requests are strictly capped to the manual allocation (140 max)
+   * to guarantee the 110-request automatic reserve remains untouched.
    */
-  public selectEligibleAccount(nowMs: number = Date.now()): AccountState | null {
+  public isManualBudgetExhausted(): boolean {
+    this.checkDayReset();
+    return this.manualUsedToday >= this.manualBudgetCap || this.isGlobalBudgetExhausted();
+  }
+
+  /**
+   * Automatic requests may consume the protected automatic reserve (110)
+   * plus any genuinely unused manual allowance up to the global limit (250).
+   */
+  public isAutomaticBudgetExhausted(): boolean {
+    this.checkDayReset();
+    return this.isGlobalBudgetExhausted();
+  }
+
+  public isBudgetExhaustedFor(requestClass: "automatic" | "manual"): boolean {
+    if (requestClass === "manual") {
+      return this.isManualBudgetExhausted();
+    }
+    return this.isAutomaticBudgetExhausted();
+  }
+
+  /**
+   * Selects the next eligible account using least-used, then oldest-used strategy.
+   * Returns null if no eligible account is available or budget for this request class is exhausted.
+   */
+  public selectEligibleAccount(
+    nowMs: number = Date.now(),
+    requestClass: "automatic" | "manual" = "automatic"
+  ): AccountState | null {
     this.checkDayReset();
 
-    if (this.isGlobalBudgetExhausted()) {
+    if (this.isBudgetExhaustedFor(requestClass)) {
       return null;
     }
 
@@ -137,17 +198,27 @@ export class AccountPoolManager {
   }
 
   /**
-   * Records a request made by an account.
+   * Records an upstream request made by an account and attributes it to the
+   * correct daily budget class (automatic reserve vs manual allocation).
    */
-  public recordRequest(slot: number, nowMs: number = Date.now()): void {
+  public recordRequest(
+    slot: number,
+    requestClass: "automatic" | "manual" = "automatic",
+    nowMs: number = Date.now()
+  ): void {
     const acc = this.accounts.find((a) => a.slot === slot);
     if (acc) {
       acc.usedToday++;
       acc.lastUsedAt = nowMs;
+      if (requestClass === "manual") {
+        this.manualUsedToday++;
+      } else {
+        this.automaticUsedToday++;
+      }
       if (acc.usedToday >= acc.maxQuota) {
         acc.quarantineReason = "EXHAUSTED";
         // Quarantined until end of current UTC day
-        const tomorrowUtc = new Date();
+        const tomorrowUtc = new Date(nowMs);
         tomorrowUtc.setUTCHours(24, 0, 0, 0);
         acc.quarantinedUntil = tomorrowUtc.getTime();
       }
@@ -246,10 +317,20 @@ export class AccountPoolManager {
       quarantinedUntil: number | null;
       quarantineReason?: QuarantineReason;
     }>,
-    lastResetDay?: string
+    lastResetDay?: string,
+    usageStats?: {
+      automaticUsedToday?: number;
+      manualUsedToday?: number;
+    }
   ): void {
     if (lastResetDay) {
       this.lastResetDay = lastResetDay;
+    }
+    if (usageStats?.automaticUsedToday !== undefined) {
+      this.automaticUsedToday = usageStats.automaticUsedToday;
+    }
+    if (usageStats?.manualUsedToday !== undefined) {
+      this.manualUsedToday = usageStats.manualUsedToday;
     }
     for (const p of persistedAccounts) {
       const acc = this.accounts.find((a) => a.slot === p.slot);
@@ -265,10 +346,14 @@ export class AccountPoolManager {
   public dump(): {
     accounts: AccountState[];
     lastResetDay: string;
+    automaticUsedToday: number;
+    manualUsedToday: number;
   } {
     return {
       accounts: this.accounts.map((a) => ({ ...a })),
       lastResetDay: this.lastResetDay,
+      automaticUsedToday: this.automaticUsedToday,
+      manualUsedToday: this.manualUsedToday,
     };
   }
 

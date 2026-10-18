@@ -1,15 +1,19 @@
 package ir.alifaniani.hawklyx.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,6 +42,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -46,15 +51,29 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ir.alifaniani.hawklyx.data.model.BrentPriceObservation
+import ir.alifaniani.hawklyx.data.model.DataFreshnessStatus
 import ir.alifaniani.hawklyx.data.model.HistoricalObservationPoint
+import ir.alifaniani.hawklyx.data.model.HistoricalPointModel
+import ir.alifaniani.hawklyx.data.model.HistoryRange
+import ir.alifaniani.hawklyx.data.model.HistoryResponseModel
+import ir.alifaniani.hawklyx.data.model.HistorySummaryModel
+import ir.alifaniani.hawklyx.data.model.HistoryUiState
+import ir.alifaniani.hawklyx.ui.theme.HawklyxAmber
 import ir.alifaniani.hawklyx.ui.theme.HawklyxBorder
+import ir.alifaniani.hawklyx.ui.theme.HawklyxButtonClosedBorder
+import ir.alifaniani.hawklyx.ui.theme.HawklyxButtonClosedContainer
+import ir.alifaniani.hawklyx.ui.theme.HawklyxButtonClosedContent
+import ir.alifaniani.hawklyx.ui.theme.HawklyxButtonEmeraldBorder
+import ir.alifaniani.hawklyx.ui.theme.HawklyxButtonEmeraldContainer
 import ir.alifaniani.hawklyx.ui.theme.HawklyxEmerald
 import ir.alifaniani.hawklyx.ui.theme.HawklyxEmeraldGlow
+import ir.alifaniani.hawklyx.ui.theme.HawklyxRed
 import ir.alifaniani.hawklyx.ui.theme.HawklyxSurface
 import ir.alifaniani.hawklyx.ui.theme.HawklyxSurfaceVariant
 import ir.alifaniani.hawklyx.ui.theme.HawklyxTextMuted
 import ir.alifaniani.hawklyx.ui.theme.HawklyxTextPrimary
 import ir.alifaniani.hawklyx.ui.theme.HawklyxTextSecondary
+import ir.alifaniani.hawklyx.util.HawklyxTimeUtils
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -65,12 +84,49 @@ import java.util.Locale
  * Adheres strictly to the genuine data integrity specification:
  * NEVER fabricates synthetic or imaginary price movements.
  */
+/**
+ * Centralized color resolver for the initial/current price in Market History.
+ * Follows identical semantic rules to the rest of HAWKLYX:
+ * - Market open & fresh: HawklyxEmerald
+ * - Market closed / stale / offline: HawklyxAmber
+ * - Quota exhausted: HawklyxTextSecondary
+ * - No data: HawklyxTextMuted
+ */
+object MarketHistoryPriceColorResolver {
+    fun resolve(
+        observation: BrentPriceObservation?,
+        status: DataFreshnessStatus,
+        isMarketClosed: Boolean
+    ): Color = when {
+        observation == null -> HawklyxTextMuted
+        isMarketClosed || status == DataFreshnessStatus.MARKET_CLOSED -> HawklyxAmber
+        status == DataFreshnessStatus.FRESH -> HawklyxEmerald
+        status == DataFreshnessStatus.STALE || status == DataFreshnessStatus.PROVIDER_UNAVAILABLE || status == DataFreshnessStatus.INVALID_RESPONSE -> HawklyxAmber
+        status == DataFreshnessStatus.QUOTA_EXHAUSTED -> HawklyxTextSecondary
+        else -> HawklyxTextPrimary
+    }
+}
+
 @Composable
 fun MarketHistoryChart(
-    history: List<HistoricalObservationPoint>,
+    historyUiState: HistoryUiState,
     currentObservation: BrentPriceObservation?,
+    status: DataFreshnessStatus = DataFreshnessStatus.FRESH,
+    isMarketClosed: Boolean = false,
+    onSelectRange: (HistoryRange) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val historyData = historyUiState.data
+    val points = historyData?.points ?: emptyList()
+    val summary = historyData?.summary
+    val selectedRange = historyUiState.selectedRange
+
+    val initialPriceColor = MarketHistoryPriceColorResolver.resolve(
+        observation = currentObservation,
+        status = status,
+        isMarketClosed = isMarketClosed
+    )
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -79,7 +135,7 @@ fun MarketHistoryChart(
             .border(1.dp, HawklyxBorder, RoundedCornerShape(20.dp))
             .padding(20.dp)
     ) {
-        // Header
+        // 1. Header: Section Title + Range Selector
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -87,7 +143,7 @@ fun MarketHistoryChart(
         ) {
             Column {
                 Text(
-                    text = "GENUINE MARKET HISTORY",
+                    text = "MARKET HISTORY",
                     style = MaterialTheme.typography.labelLarge.copy(
                         letterSpacing = 1.sp,
                         fontWeight = FontWeight.Bold,
@@ -95,122 +151,286 @@ fun MarketHistoryChart(
                     )
                 )
                 Text(
-                    text = if (history.size >= 2) "${history.size} verified observations" else "Verified trend capture",
+                    text = if (points.size >= 2) {
+                        "${points.size} verified ${if (historyData?.resolution == "daily") "daily" else "hourly"} points"
+                    } else {
+                        "Verified historical edge capture"
+                    },
                     style = MaterialTheme.typography.labelSmall.copy(color = HawklyxTextMuted)
                 )
             }
 
-            val badgeText = if (history.size >= 2) "LIVE TREND" else "ACCUMULATING"
-            val badgeColor = if (history.size >= 2) HawklyxEmerald else HawklyxTextSecondary
-
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(HawklyxSurfaceVariant)
-                    .border(1.dp, HawklyxBorder, RoundedCornerShape(8.dp))
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(6.dp)
-                        .clip(CircleShape)
-                        .background(badgeColor)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = badgeText,
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontWeight = FontWeight.Bold,
-                        color = badgeColor
-                    )
-                )
-            }
+            // Status Badge
+            HistoryStatusBadge(
+                isStale = historyUiState.isStale,
+                isMarketClosed = isMarketClosed,
+                isPartial = historyData?.isPartial == true,
+                hasPoints = points.size >= 2
+            )
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        if (history.size >= 2) {
-            ActiveHistoryCanvasChart(points = history)
-        } else {
-            AccumulatingHistoryState(currentObservation = currentObservation)
+        // 2. Compact Segmented Range Selector (1D, 1W, 1M, 6M, 1Y)
+        HistoryRangeSelector(
+            selectedRange = selectedRange,
+            onSelectRange = onSelectRange
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // 3. Chart Body: Loading, Active Chart, or Accumulating State
+        when {
+            historyUiState.isLoading && historyData == null -> {
+                HistoryLoadingState()
+            }
+            points.size >= 2 -> {
+                ActiveHistoryCanvasChart(
+                    points = points,
+                    summary = summary,
+                    range = selectedRange,
+                    resolution = historyData?.resolution ?: "hourly"
+                )
+            }
+            else -> {
+                AccumulatingHistoryState(
+                    currentObservation = currentObservation,
+                    collectionStartDate = historyData?.collectionStartDate,
+                    priceColor = initialPriceColor
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Backwards compatibility overload for legacy callers.
+ */
+@Composable
+fun MarketHistoryChart(
+    history: List<HistoricalObservationPoint>,
+    currentObservation: BrentPriceObservation?,
+    modifier: Modifier = Modifier
+) {
+    val syntheticPoints = history.map {
+        HistoricalPointModel(
+            timestamp = Instant.ofEpochMilli(it.timestampMs).toString(),
+            timestampMs = it.timestampMs,
+            price = it.price,
+            formatted = it.formatted,
+            asOf = it.asOfIso,
+            fetchedAt = it.asOfIso
+        )
+    }
+    val fallbackData = if (syntheticPoints.isNotEmpty()) {
+        HistoryResponseModel(
+            status = "success",
+            count = syntheticPoints.size,
+            points = syntheticPoints
+        )
+    } else null
+
+    MarketHistoryChart(
+        historyUiState = HistoryUiState(
+            selectedRange = HistoryRange.ONE_MONTH,
+            data = fallbackData
+        ),
+        currentObservation = currentObservation,
+        modifier = modifier
+    )
+}
+
+@Composable
+private fun HistoryRangeSelector(
+    selectedRange: HistoryRange,
+    onSelectRange: (HistoryRange) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(HawklyxSurfaceVariant)
+            .border(1.dp, HawklyxBorder, RoundedCornerShape(10.dp))
+            .padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        HistoryRange.entries.forEach { range ->
+            val isSelected = (range == selectedRange)
+            val containerColor = if (isSelected) HawklyxButtonEmeraldContainer else Color.Transparent
+            val borderColor = if (isSelected) HawklyxButtonEmeraldBorder else Color.Transparent
+            val textColor = if (isSelected) HawklyxEmerald else HawklyxTextMuted
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(30.dp)
+                    .clip(RoundedCornerShape(7.dp))
+                    .background(containerColor)
+                    .border(1.dp, borderColor, RoundedCornerShape(7.dp))
+                    .clickable { onSelectRange(range) },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = range.label,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        color = textColor,
+                        fontSize = 11.sp
+                    )
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun ActiveHistoryCanvasChart(points: List<HistoricalObservationPoint>) {
-    var selectedIndex by remember { mutableStateOf<Int?>(null) }
-
-    val prices = points.map { it.price }
-    val minPrice = prices.minOrNull() ?: 0.0
-    val maxPrice = prices.maxOrNull() ?: 0.0
-    val priceRange = if (maxPrice > minPrice) maxPrice - minPrice else 1.0
-
-    val selectedPoint = selectedIndex?.let { points.getOrNull(it) } ?: points.lastOrNull()
-
-    // Inspection pill
-    if (selectedPoint != null) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = selectedPoint.formatted,
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    color = HawklyxEmerald
-                )
-            )
-            Text(
-                text = formatHistoryTimestamp(selectedPoint.timestampMs),
-                style = MaterialTheme.typography.labelSmall.copy(color = HawklyxTextSecondary)
-            )
-        }
+private fun HistoryStatusBadge(
+    isStale: Boolean,
+    isMarketClosed: Boolean,
+    isPartial: Boolean,
+    hasPoints: Boolean
+) {
+    val (badgeText, badgeBg, badgeBorder, badgeColor) = when {
+        isStale -> Quad(
+            "CACHED",
+            HawklyxButtonClosedContainer,
+            HawklyxButtonClosedBorder,
+            HawklyxAmber
+        )
+        isMarketClosed -> Quad(
+            "MARKET CLOSED",
+            HawklyxButtonClosedContainer,
+            HawklyxButtonClosedBorder,
+            HawklyxButtonClosedContent
+        )
+        isPartial -> Quad(
+            "PARTIAL RANGE",
+            HawklyxSurfaceVariant,
+            HawklyxBorder,
+            HawklyxTextSecondary
+        )
+        hasPoints -> Quad(
+            "LIVE TREND",
+            HawklyxButtonEmeraldContainer,
+            HawklyxButtonEmeraldBorder,
+            HawklyxEmerald
+        )
+        else -> Quad(
+            "ACCUMULATING",
+            HawklyxSurfaceVariant,
+            HawklyxBorder,
+            HawklyxTextMuted
+        )
     }
 
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(badgeBg)
+            .border(1.dp, badgeBorder, RoundedCornerShape(8.dp))
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(6.dp)
+                .clip(CircleShape)
+                .background(badgeColor)
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = badgeText,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.Bold,
+                color = badgeColor,
+                fontSize = 10.sp
+            )
+        )
+    }
+}
+
+private data class Quad<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
+
+@Composable
+private fun ActiveHistoryCanvasChart(
+    points: List<HistoricalPointModel>,
+    summary: HistorySummaryModel?,
+    range: HistoryRange,
+    resolution: String
+) {
+    var scrubbedIndex by remember(points) { mutableStateOf<Int?>(null) }
+
+    val prices = points.map { it.price }
+    val minPrice = summary?.low ?: prices.minOrNull() ?: 0.0
+    val maxPrice = summary?.high ?: prices.maxOrNull() ?: 0.0
+    val priceRange = if (maxPrice > minPrice) maxPrice - minPrice else 1.0
+
+    val activePoint = scrubbedIndex?.let { points.getOrNull(it) } ?: points.lastOrNull()
+
+    // 1. Interactive Metrics Inspection Bar
+    InspectionSummaryHeader(
+        activePoint = activePoint,
+        summary = summary,
+        isScrubbing = scrubbedIndex != null,
+        range = range,
+        isDaily = resolution == "daily"
+    )
+
+    Spacer(modifier = Modifier.height(10.dp))
+
+    // 2. Canvas with Non-Blocking Horizontal Scrubbing
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(160.dp)
+            .height(175.dp)
             .pointerInput(points) {
                 detectTapGestures(
                     onPress = { offset ->
                         val ratio = (offset.x / size.width).coerceIn(0f, 1f)
-                        selectedIndex = (ratio * (points.size - 1)).toInt()
+                        scrubbedIndex = (ratio * (points.size - 1)).toInt()
                     }
                 )
             }
             .pointerInput(points) {
-                detectDragGestures { change, _ ->
-                    val ratio = (change.position.x / size.width).coerceIn(0f, 1f)
-                    selectedIndex = (ratio * (points.size - 1)).toInt()
-                }
+                detectHorizontalDragGestures(
+                    onDragStart = { offset ->
+                        val ratio = (offset.x / size.width).coerceIn(0f, 1f)
+                        scrubbedIndex = (ratio * (points.size - 1)).toInt()
+                    },
+                    onHorizontalDrag = { change, _ ->
+                        val ratio = (change.position.x / size.width).coerceIn(0f, 1f)
+                        scrubbedIndex = (ratio * (points.size - 1)).toInt()
+                        change.consume()
+                    },
+                    onDragEnd = {
+                        scrubbedIndex = null
+                    },
+                    onDragCancel = {
+                        scrubbedIndex = null
+                    }
+                )
             }
     ) {
         Canvas(modifier = Modifier.matchParentSize()) {
             val width = size.width
             val height = size.height
-            val padTop = 12f
-            val padBottom = 20f
+            val padTop = 10f
+            val padBottom = 22f
             val availableHeight = height - padTop - padBottom
 
-            // 1. Draw subtle horizontal gridlines
+            // A. Draw Subtle Horizontal Guidelines
             val gridLines = 3
             for (i in 0..gridLines) {
                 val y = padTop + (availableHeight * (i.toFloat() / gridLines))
                 drawLine(
-                    color = Color(0xFF242B26),
+                    color = Color(0xFF202621),
                     start = Offset(0f, y),
                     end = Offset(width, y),
                     strokeWidth = 1f
                 )
             }
 
-            // 2. Map coordinates
+            // B. Map Point Coordinates
             val coords = points.mapIndexed { index, pt ->
                 val x = (index.toFloat() / (points.size - 1)) * width
                 val normalizedY = ((pt.price - minPrice) / priceRange).toFloat()
@@ -218,7 +438,7 @@ private fun ActiveHistoryCanvasChart(points: List<HistoricalObservationPoint>) {
                 Offset(x, y)
             }
 
-            // 3. Draw gradient area
+            // C. Draw Emerald Gradient Area
             val fillPath = Path().apply {
                 moveTo(coords.first().x, height - padBottom)
                 coords.forEach { lineTo(it.x, it.y) }
@@ -230,15 +450,15 @@ private fun ActiveHistoryCanvasChart(points: List<HistoricalObservationPoint>) {
                 path = fillPath,
                 brush = Brush.verticalGradient(
                     colors = listOf(
-                        HawklyxEmerald.copy(alpha = 0.22f),
-                        HawklyxEmerald.copy(alpha = 0.02f)
+                        HawklyxEmerald.copy(alpha = 0.20f),
+                        HawklyxEmerald.copy(alpha = 0.01f)
                     ),
                     startY = padTop,
                     endY = height - padBottom
                 )
             )
 
-            // 4. Draw continuous line
+            // D. Draw Primary Trend Line
             val linePath = Path().apply {
                 coords.forEachIndexed { i, pt ->
                     if (i == 0) moveTo(pt.x, pt.y) else lineTo(pt.x, pt.y)
@@ -249,54 +469,251 @@ private fun ActiveHistoryCanvasChart(points: List<HistoricalObservationPoint>) {
                 path = linePath,
                 color = HawklyxEmerald,
                 style = Stroke(
-                    width = 2.5.dp.toPx(),
+                    width = 2.2.dp.toPx(),
                     cap = StrokeCap.Round,
                     join = StrokeJoin.Round
                 )
             )
 
-            // 5. Draw observation nodes
-            coords.forEachIndexed { index, offset ->
-                val isSelected = (index == selectedIndex)
-                val radius = if (isSelected) 5.dp.toPx() else 2.5.dp.toPx()
-                val alpha = if (isSelected) 1f else 0.7f
+            // E. Draw Nodes (if point density permits clean rendering)
+            if (points.size <= 32) {
+                coords.forEachIndexed { index, offset ->
+                    val isSelected = (index == scrubbedIndex)
+                    val radius = if (isSelected) 4.5.dp.toPx() else 2.dp.toPx()
+                    val alpha = if (isSelected) 1f else 0.5f
 
-                if (isSelected) {
                     drawCircle(
-                        color = HawklyxEmeraldGlow,
-                        radius = radius * 2.2f,
+                        color = HawklyxEmerald.copy(alpha = alpha),
+                        radius = radius,
                         center = offset
                     )
                 }
-                drawCircle(
-                    color = HawklyxEmerald.copy(alpha = alpha),
-                    radius = radius,
-                    center = offset
-                )
+            }
+
+            // F. Draw Interactive Crosshair & Target Node when Scrubbing
+            scrubbedIndex?.let { idx ->
+                val targetOffset = coords.getOrNull(idx)
+                if (targetOffset != null) {
+                    // Vertical Crosshair Guideline
+                    drawLine(
+                        color = HawklyxEmerald.copy(alpha = 0.6f),
+                        start = Offset(targetOffset.x, padTop),
+                        end = Offset(targetOffset.x, height - padBottom),
+                        strokeWidth = 1.dp.toPx(),
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f), 0f)
+                    )
+
+                    // Target Highlight Glow
+                    drawCircle(
+                        color = HawklyxEmeraldGlow,
+                        radius = 12.dp.toPx(),
+                        center = targetOffset
+                    )
+                    drawCircle(
+                        color = HawklyxEmerald,
+                        radius = 5.dp.toPx(),
+                        center = targetOffset
+                    )
+                    drawCircle(
+                        color = Color(0xFF101311),
+                        radius = 2.5.dp.toPx(),
+                        center = targetOffset
+                    )
+                }
             }
         }
     }
 
-    // Min / Max range footer
+    // 3. Price & Date Bounds Footer
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
+        val firstDate = points.firstOrNull()?.timestampMs ?: 0L
+        val lastDate = points.lastOrNull()?.timestampMs ?: 0L
+
         Text(
-            text = "Min: $%.2f".format(minPrice),
-            style = MaterialTheme.typography.labelSmall.copy(color = HawklyxTextMuted)
+            text = formatBoundDate(firstDate, range),
+            style = MaterialTheme.typography.labelSmall.copy(color = HawklyxTextMuted, fontSize = 11.sp)
         )
+
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text(
+                text = "L: $%.2f".format(minPrice),
+                style = MaterialTheme.typography.labelSmall.copy(color = HawklyxTextMuted, fontSize = 11.sp)
+            )
+            Text(
+                text = "H: $%.2f".format(maxPrice),
+                style = MaterialTheme.typography.labelSmall.copy(color = HawklyxTextMuted, fontSize = 11.sp)
+            )
+        }
+
         Text(
-            text = "Max: $%.2f".format(maxPrice),
-            style = MaterialTheme.typography.labelSmall.copy(color = HawklyxTextMuted)
+            text = formatBoundDate(lastDate, range),
+            style = MaterialTheme.typography.labelSmall.copy(color = HawklyxTextMuted, fontSize = 11.sp)
         )
     }
 }
 
 @Composable
-private fun AccumulatingHistoryState(currentObservation: BrentPriceObservation?) {
+private fun InspectionSummaryHeader(
+    activePoint: HistoricalPointModel?,
+    summary: HistorySummaryModel?,
+    isScrubbing: Boolean,
+    range: HistoryRange,
+    isDaily: Boolean
+) {
+    if (activePoint == null) return
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Bottom
+        ) {
+            // Price & Delta Column
+            Column {
+                Text(
+                    text = activePoint.formatted,
+                    style = MaterialTheme.typography.headlineSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = HawklyxTextPrimary,
+                        fontSize = 24.sp
+                    )
+                )
+
+                if (summary != null) {
+                    val deltaAbs = summary.changeAbsolute
+                    val deltaPct = summary.changePercent
+                    val isPositive = deltaAbs >= 0.0
+                    val deltaColor = if (isPositive) HawklyxEmerald else HawklyxRed
+                    val deltaPrefix = if (isPositive) "+" else ""
+
+                    Text(
+                        text = "$deltaPrefix$%.2f ($deltaPrefix$%.2f%%) in range".format(deltaAbs, deltaPct),
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            color = deltaColor,
+                            fontSize = 12.sp
+                        )
+                    )
+                }
+            }
+
+            // Timestamp Column
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = if (isScrubbing) "INSPECTING" else "LATEST OBSERVATION",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = if (isScrubbing) HawklyxEmerald else HawklyxTextMuted,
+                        fontSize = 10.sp,
+                        letterSpacing = 0.5.sp
+                    )
+                )
+                Text(
+                    text = formatInspectionTimestamp(activePoint.timestampMs, isDaily),
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        color = HawklyxTextSecondary,
+                        fontWeight = FontWeight.Medium
+                    )
+                )
+            }
+        }
+
+        // Daily OHLC details (if active point is a daily aggregate)
+        if (isDaily && activePoint.isDailyAggregate) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(HawklyxSurfaceVariant)
+                    .border(1.dp, HawklyxBorder, RoundedCornerShape(6.dp))
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "O: $%.2f".format(activePoint.open),
+                    style = MaterialTheme.typography.labelSmall.copy(color = HawklyxTextSecondary, fontSize = 10.sp)
+                )
+                Text(
+                    text = "H: $%.2f".format(activePoint.high),
+                    style = MaterialTheme.typography.labelSmall.copy(color = HawklyxTextSecondary, fontSize = 10.sp)
+                )
+                Text(
+                    text = "L: $%.2f".format(activePoint.low),
+                    style = MaterialTheme.typography.labelSmall.copy(color = HawklyxTextSecondary, fontSize = 10.sp)
+                )
+                Text(
+                    text = "C: $%.2f".format(activePoint.close),
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        color = HawklyxEmerald,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 10.sp
+                    )
+                )
+                if (activePoint.sampleCount != null) {
+                    Text(
+                        text = "(${activePoint.sampleCount}h)",
+                        style = MaterialTheme.typography.labelSmall.copy(color = HawklyxTextMuted, fontSize = 10.sp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HistoryLoadingState() {
+    val infiniteTransition = rememberInfiniteTransition(label = "shimmer")
+    val shimmerAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.2f,
+        targetValue = 0.7f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "shimmerAlpha"
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(180.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(HawklyxSurfaceVariant)
+            .border(1.dp, HawklyxBorder, RoundedCornerShape(12.dp)),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.alpha(shimmerAlpha)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(12.dp)
+                    .clip(CircleShape)
+                    .background(HawklyxEmerald)
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = "Retrieving verified historical points...",
+                style = MaterialTheme.typography.bodyMedium.copy(color = HawklyxTextSecondary, fontSize = 12.sp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun AccumulatingHistoryState(
+    currentObservation: BrentPriceObservation?,
+    collectionStartDate: String?,
+    priceColor: Color = HawklyxEmerald
+) {
     val infiniteTransition = rememberInfiniteTransition(label = "pulse_node")
     val pulseAlpha by infiniteTransition.animateFloat(
         initialValue = 0.35f,
@@ -361,18 +778,23 @@ private fun AccumulatingHistoryState(currentObservation: BrentPriceObservation?)
                     text = currentObservation?.formatted ?: "$--.--",
                     style = MaterialTheme.typography.bodyMedium.copy(
                         fontWeight = FontWeight.Bold,
-                        color = HawklyxEmerald
+                        color = priceColor
                     )
                 )
             }
 
             Column(horizontalAlignment = Alignment.End) {
                 Text(
-                    text = "Market As Of",
+                    text = if (collectionStartDate != null) "Collection Started" else "Market As Of",
                     style = MaterialTheme.typography.labelSmall.copy(color = HawklyxTextMuted)
                 )
+                val timeString = if (collectionStartDate != null) {
+                    HawklyxTimeUtils.formatIsoToDateTime(collectionStartDate)
+                } else {
+                    HawklyxTimeUtils.formatIsoToDateTime(currentObservation?.asOf)
+                }
                 Text(
-                    text = currentObservation?.asOf?.take(19)?.replace("T", " ") ?: "Awaiting sync",
+                    text = timeString,
                     style = MaterialTheme.typography.bodyMedium.copy(
                         fontWeight = FontWeight.Medium,
                         color = HawklyxTextPrimary
@@ -383,11 +805,39 @@ private fun AccumulatingHistoryState(currentObservation: BrentPriceObservation?)
     }
 }
 
-private fun formatHistoryTimestamp(millis: Long): String {
+private fun formatBoundDate(
+    millis: Long,
+    range: HistoryRange,
+    zone: ZoneId = ZoneId.systemDefault()
+): String {
+    if (millis <= 0L) return ""
     return try {
         val instant = Instant.ofEpochMilli(millis)
-        val formatter = DateTimeFormatter.ofPattern("MMM dd, HH:mm", Locale.getDefault())
-            .withZone(ZoneId.systemDefault())
+        val pattern = when (range) {
+            HistoryRange.ONE_DAY -> "HH:mm"
+            HistoryRange.ONE_WEEK -> "EEE HH:mm"
+            HistoryRange.ONE_MONTH -> "MMM dd"
+            HistoryRange.SIX_MONTHS, HistoryRange.ONE_YEAR -> "MMM yyyy"
+        }
+        val formatter = DateTimeFormatter.ofPattern(pattern, Locale.getDefault())
+            .withZone(zone)
+        formatter.format(instant)
+    } catch (_: Exception) {
+        ""
+    }
+}
+
+private fun formatInspectionTimestamp(
+    millis: Long,
+    isDaily: Boolean,
+    zone: ZoneId = ZoneId.systemDefault()
+): String {
+    if (millis <= 0L) return ""
+    return try {
+        val instant = Instant.ofEpochMilli(millis)
+        val pattern = if (isDaily) "EEE, MMM dd, yyyy" else "MMM dd, HH:mm"
+        val formatter = DateTimeFormatter.ofPattern(pattern, Locale.getDefault())
+            .withZone(zone)
         formatter.format(instant)
     } catch (_: Exception) {
         ""

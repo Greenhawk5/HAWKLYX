@@ -1,7 +1,11 @@
 <resources>
     <string name="app_name">HAWKLYX</string>
-    <string name="widget_name">HAWKLYX Brent Crude</string>
-    <string name="widget_description">Live Brent crude oil price display with glanceable freshness and instant refresh</string>
+    <string name="widget_name">HAWKLYX Market Snapshot</string>
+    <string name="widget_description">Compact Brent crude oil price snapshot with real-time freshness and quick refresh</string>
+    <string name="widget_snapshot_name">HAWKLYX Market Snapshot</string>
+    <string name="widget_snapshot_description">Compact Brent crude oil price snapshot with real-time freshness and quick refresh</string>
+    <string name="widget_intelligence_name">HAWKLYX Market Intelligence</string>
+    <string name="widget_intelligence_description">Brent crude price and authentic 7-day historical market trend chart</string>
     <string name="instrument_brent">BRENT CRUDE</string>
     <string name="unit_usd_bbl">USD / barrel</string>
     <string name="status_fresh">LIVE</string>
@@ -9,7 +13,14 @@
     <string name="status_refreshing">SYNCING</string>
     <string name="status_unavailable">OFFLINE</string>
     <string name="status_quota_limit">QUOTA LIMIT</string>
+    <string name="status_market_closed">MARKET CLOSED</string>
     <string name="status_no_data">NO DATA</string>
     <string name="tap_to_refresh">Tap to refresh</string>
     <string name="refresh_cooldown">Cooldown active</string>
+    <string name="history_range_7d_label">7D TREND</string>
+    <string name="history_accumulating">Accumulating history</string>
+    <string name="history_loading">Syncing market history...</string>
+    <string name="history_no_data">No historical points recorded</string>
+    <string name="history_stale_note">Offline • Showing cached 7D trend</string>
+    <string name="history_empty_note">Requires at least 2 historical points</string>
 </resources>

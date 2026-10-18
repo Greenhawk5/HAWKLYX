@@ -1,127 +1,197 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/hawklyx_widget_bg"
-    android:padding="14dp">
+    android:orientation="vertical"
+    android:padding="12dp">
 
-    <!-- Header Row: Brand Icon, Title, Freshness Badge, Refresh Action -->
+    <!-- Header Row: Prominent Brand Emblem, Instrument Title Stack, Dynamic Status Badge -->
     <LinearLayout
         android:id="@+id/widget_header"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_alignParentTop="true"
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
+        <!-- Prominent Brand Emblem: enlarged to 34dp for strong brand identity -->
         <ImageView
             android:id="@+id/widget_icon"
-            android:layout_width="16dp"
-            android:layout_height="16dp"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
             android:contentDescription="@string/app_name"
-            android:src="@drawable/hawklyx_icon_small" />
+            android:scaleType="fitCenter"
+            android:src="@drawable/hawklyx_logo" />
 
-        <TextView
-            android:id="@+id/widget_title"
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="8dp"
             android:layout_weight="1"
-            android:ellipsize="end"
-            android:letterSpacing="0.08"
-            android:maxLines="1"
-            android:text="HAWKLYX • BRENT"
-            android:textColor="@color/hawklyx_text_secondary"
-            android:textSize="11sp"
-            android:textStyle="bold" />
+            android:gravity="center_vertical"
+            android:orientation="vertical">
 
+            <TextView
+                android:id="@+id/widget_brand_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:letterSpacing="0.08"
+                android:maxLines="1"
+                android:text="HAWKLYX"
+                android:textColor="@color/hawklyx_text_secondary"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/widget_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:letterSpacing="0.04"
+                android:maxLines="1"
+                android:text="BRENT CRUDE SPOT"
+                android:textColor="@color/hawklyx_text_primary"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- Dynamic Status Badge Pill -->
         <TextView
             android:id="@+id/widget_status_badge"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="6dp"
-            android:background="@drawable/hawklyx_badge_bg"
+            android:background="@drawable/hawklyx_badge_emerald"
+            android:letterSpacing="0.06"
             android:paddingStart="7dp"
             android:paddingTop="3dp"
             android:paddingEnd="7dp"
             android:paddingBottom="3dp"
             android:text="@string/status_fresh"
             android:textColor="@color/hawklyx_emerald"
-            android:textSize="9sp"
+            android:textSize="9.5sp"
             android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- Center Hero Section: Horizontal Balance across the entire widget width -->
+    <LinearLayout
+        android:id="@+id/widget_price_container"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingTop="2dp"
+        android:paddingBottom="2dp">
+
+        <!-- Left: Dominant Tabular Price & Sub-unit prioritized with intrinsic wrap_content -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="bottom"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/widget_price"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFeatureSettings="tnum"
+                android:includeFontPadding="false"
+                android:text="--.--"
+                android:textColor="@color/hawklyx_emerald"
+                android:textSize="30sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/widget_unit"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="5dp"
+                android:layout_marginBottom="3dp"
+                android:letterSpacing="0.02"
+                android:maxLines="1"
+                android:text="@string/unit_usd_bbl"
+                android:textColor="@color/hawklyx_text_secondary"
+                android:textSize="10.5sp" />
+        </LinearLayout>
+
+        <!-- Right: Market Cadence / Session Descriptor Pill aligned to the far right -->
+        <LinearLayout
+            android:id="@+id/widget_cadence_container"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:gravity="end|center_vertical">
+
+            <TextView
+                android:id="@+id/widget_cadence_pill"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/hawklyx_card_surface"
+                android:ellipsize="end"
+                android:gravity="center"
+                android:letterSpacing="0.04"
+                android:maxLines="1"
+                android:paddingStart="6dp"
+                android:paddingTop="3dp"
+                android:paddingEnd="6dp"
+                android:paddingBottom="3dp"
+                android:text="LAST CLOSE"
+                android:textColor="@color/hawklyx_text_secondary"
+                android:textSize="8.5sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Footer Row: Last observation timestamp, status message, and distinct refresh affordance -->
+    <LinearLayout
+        android:id="@+id/widget_footer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center_vertical"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/widget_updated"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="Awaiting first sync"
+                android:textColor="@color/hawklyx_text_muted"
+                android:textSize="10sp" />
+
+            <TextView
+                android:id="@+id/widget_status_msg"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="1dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="Live energy quote • 15m cadence"
+                android:textColor="@color/hawklyx_text_muted"
+                android:textSize="9sp" />
+        </LinearLayout>
 
         <ImageButton
             android:id="@+id/widget_btn_refresh"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/hawklyx_card_surface"
             android:contentDescription="@string/tap_to_refresh"
             android:padding="5dp"
             android:scaleType="centerInside"
             android:src="@drawable/ic_refresh" />
     </LinearLayout>
 
-    <!-- Dominant Price Section -->
-    <LinearLayout
-        android:id="@+id/widget_price_container"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_below="@id/widget_header"
-        android:layout_marginTop="6dp"
-        android:gravity="bottom"
-        android:orientation="horizontal">
-
-        <TextView
-            android:id="@+id/widget_price"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:includeFontPadding="false"
-            android:text="--.--"
-            android:textColor="@color/hawklyx_emerald"
-            android:textSize="32sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/widget_unit"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:layout_marginBottom="4dp"
-            android:text="@string/unit_usd_bbl"
-            android:textColor="@color/hawklyx_text_secondary"
-            android:textSize="11sp" />
-    </LinearLayout>
-
-    <!-- Footer Row: Last observation timestamp & status / cooldown note -->
-    <LinearLayout
-        android:id="@+id/widget_footer"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_alignParentBottom="true"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
-
-        <TextView
-            android:id="@+id/widget_updated"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:text="Awaiting first sync"
-            android:textColor="@color/hawklyx_text_muted"
-            android:textSize="10sp" />
-
-        <TextView
-            android:id="@+id/widget_status_msg"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:text="@string/tap_to_refresh"
-            android:textColor="@color/hawklyx_text_muted"
-            android:textSize="9sp" />
-    </LinearLayout>
-
-</RelativeLayout>
+</LinearLayout>

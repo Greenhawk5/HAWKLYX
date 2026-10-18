@@ -18,11 +18,16 @@
       "new_sqlite_classes": ["HawklyxCoordinator"]
     }
   ],
+  "triggers": {
+    "crons": ["*/15 * * * *"]
+  },
   "vars": {
     "DEFAULT_UPSTREAM_INTERVAL_MINUTES": "15",
     "MANUAL_REFRESH_COOLDOWN_SECONDS": "180",
     "MAX_DAILY_QUOTA_PER_ACCOUNT": "50",
-    "GLOBAL_DAILY_BUDGET": "200",
+    "GLOBAL_DAILY_BUDGET": "250",
+    "AUTOMATIC_RESERVE_BUDGET": "110",
+    "MANUAL_BUDGET_CAP": "140",
     "PRICE_SANITY_MIN": "10",
     "PRICE_SANITY_MAX": "250"
   }

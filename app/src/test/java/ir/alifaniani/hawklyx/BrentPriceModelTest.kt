@@ -57,4 +57,128 @@ class BrentPriceModelTest {
         assertTrue(values.contains("NO_DATA"))
         assertTrue(values.contains("INVALID_RESPONSE"))
     }
+
+    @Test
+    fun priceUiState_marketClosedEvaluation() {
+        val openState = PriceUiState(
+            status = DataFreshnessStatus.FRESH,
+            marketState = ir.alifaniani.hawklyx.data.model.MarketStateModel(
+                isOpen = true,
+                status = "open",
+                session = "regular_trading"
+            )
+        )
+        assertFalse(openState.isMarketClosed)
+
+        val closedByStatus = PriceUiState(
+            status = DataFreshnessStatus.MARKET_CLOSED
+        )
+        assertTrue(closedByStatus.isMarketClosed)
+
+        val closedByModel = PriceUiState(
+            status = DataFreshnessStatus.FRESH,
+            marketState = ir.alifaniani.hawklyx.data.model.MarketStateModel(
+                isOpen = false,
+                status = "closed",
+                session = "weekend_closed"
+            )
+        )
+        assertTrue(closedByModel.isMarketClosed)
+    }
+
+    @Test
+    fun priceUiState_refreshActionEnablement_rules() {
+        fun isRefreshActive(state: PriceUiState): Boolean {
+            val isClosed = state.isMarketClosed
+            val isCooldownActive = state.cooldownRemainingSeconds > 0
+            return !isClosed && !state.isRefreshing && !isCooldownActive
+        }
+
+        // Open, idle, no cooldown -> enabled
+        val readyState = PriceUiState(
+            status = DataFreshnessStatus.FRESH,
+            isRefreshing = false,
+            cooldownRemainingSeconds = 0
+        )
+        assertTrue(isRefreshActive(readyState))
+
+        // Market closed -> disabled
+        val closedState = readyState.copy(status = DataFreshnessStatus.MARKET_CLOSED)
+        assertFalse(isRefreshActive(closedState))
+
+        // Syncing -> disabled
+        val syncingState = readyState.copy(isRefreshing = true)
+        assertFalse(isRefreshActive(syncingState))
+
+        // Cooldown active -> disabled
+        val cooldownState = readyState.copy(cooldownRemainingSeconds = 45)
+        assertFalse(isRefreshActive(cooldownState))
+    }
+
+    @Test
+    fun marketHistoryPriceColorResolver_followsSemanticMarketStateRules() {
+        val validObs = BrentPriceObservation(
+            price = 92.50,
+            formatted = "$92.50",
+            asOf = "2026-10-18T14:00:00Z",
+            fetchedAt = "2026-10-18T14:05:00Z"
+        )
+
+        // 1. Market open and fresh -> HawklyxEmerald
+        val openColor = ir.alifaniani.hawklyx.ui.components.MarketHistoryPriceColorResolver.resolve(
+            observation = validObs,
+            status = DataFreshnessStatus.FRESH,
+            isMarketClosed = false
+        )
+        assertEquals(ir.alifaniani.hawklyx.ui.theme.HawklyxEmerald, openColor)
+
+        // 2. Market closed (by isMarketClosed flag) -> HawklyxAmber
+        val closedFlagColor = ir.alifaniani.hawklyx.ui.components.MarketHistoryPriceColorResolver.resolve(
+            observation = validObs,
+            status = DataFreshnessStatus.FRESH,
+            isMarketClosed = true
+        )
+        assertEquals(ir.alifaniani.hawklyx.ui.theme.HawklyxAmber, closedFlagColor)
+
+        // 3. Market closed (by status) -> HawklyxAmber
+        val closedStatusColor = ir.alifaniani.hawklyx.ui.components.MarketHistoryPriceColorResolver.resolve(
+            observation = validObs,
+            status = DataFreshnessStatus.MARKET_CLOSED,
+            isMarketClosed = false
+        )
+        assertEquals(ir.alifaniani.hawklyx.ui.theme.HawklyxAmber, closedStatusColor)
+
+        // 4. Stale quote -> HawklyxAmber
+        val staleColor = ir.alifaniani.hawklyx.ui.components.MarketHistoryPriceColorResolver.resolve(
+            observation = validObs,
+            status = DataFreshnessStatus.STALE,
+            isMarketClosed = false
+        )
+        assertEquals(ir.alifaniani.hawklyx.ui.theme.HawklyxAmber, staleColor)
+
+        // 5. Offline / Provider unavailable -> HawklyxAmber
+        val offlineColor = ir.alifaniani.hawklyx.ui.components.MarketHistoryPriceColorResolver.resolve(
+            observation = validObs,
+            status = DataFreshnessStatus.PROVIDER_UNAVAILABLE,
+            isMarketClosed = false
+        )
+        assertEquals(ir.alifaniani.hawklyx.ui.theme.HawklyxAmber, offlineColor)
+
+        // 6. Quota exhausted -> HawklyxTextSecondary
+        val quotaColor = ir.alifaniani.hawklyx.ui.components.MarketHistoryPriceColorResolver.resolve(
+            observation = validObs,
+            status = DataFreshnessStatus.QUOTA_EXHAUSTED,
+            isMarketClosed = false
+        )
+        assertEquals(ir.alifaniani.hawklyx.ui.theme.HawklyxTextSecondary, quotaColor)
+
+        // 7. No data -> HawklyxTextMuted
+        val noDataColor = ir.alifaniani.hawklyx.ui.components.MarketHistoryPriceColorResolver.resolve(
+            observation = null,
+            status = DataFreshnessStatus.NO_DATA,
+            isMarketClosed = false
+        )
+        assertEquals(ir.alifaniani.hawklyx.ui.theme.HawklyxTextMuted, noDataColor)
+    }
 }
+
