@@ -29,11 +29,32 @@ enum class DataFreshnessStatus {
     INVALID_RESPONSE
 }
 
+/**
+ * Genuine historical observation point recorded from the edge service.
+ * Never fabricated or synthetically interpolated.
+ */
+data class HistoricalObservationPoint(
+    val timestampMs: Long,
+    val price: Double,
+    val formatted: String,
+    val asOfIso: String
+)
+
+/**
+ * Comprehensive UI state for the HAWKLYX application.
+ * Fully decouples observation presence, network state, cooldown countdown,
+ * and background cadence scheduling.
+ */
 data class PriceUiState(
     val observation: BrentPriceObservation? = null,
     val status: DataFreshnessStatus = DataFreshnessStatus.NO_DATA,
     val message: String = "Awaiting first synchronization",
     val isRefreshing: Boolean = false,
     val nextRefreshAllowedTimeMs: Long = 0L,
-    val cooldownRemainingSeconds: Int = 0
+    val cooldownRemainingSeconds: Int = 0,
+    val nextScheduledCadenceTimeMs: Long = 0L,
+    val cadenceRemainingSeconds: Int = 0,
+    val history: List<HistoricalObservationPoint> = emptyList(),
+    val lastSyncAttemptTimeMs: Long = 0L,
+    val lastSyncSuccess: Boolean = false
 )

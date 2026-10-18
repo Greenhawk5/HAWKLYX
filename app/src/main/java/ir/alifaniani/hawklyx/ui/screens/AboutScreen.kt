@@ -1,7 +1,9 @@
 package ir.alifaniani.hawklyx.ui.screens
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,10 +21,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CloudQueue
-import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -33,9 +39,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ir.alifaniani.hawklyx.R
 import ir.alifaniani.hawklyx.ui.theme.HawklyxBorder
 import ir.alifaniani.hawklyx.ui.theme.HawklyxDarkBackground
 import ir.alifaniani.hawklyx.ui.theme.HawklyxEmerald
@@ -51,6 +60,7 @@ fun AboutScreen(
     modifier: Modifier = Modifier
 ) {
     val scrollState = rememberScrollState()
+    val uriHandler = LocalUriHandler.current
 
     Column(
         modifier = modifier
@@ -58,9 +68,9 @@ fun AboutScreen(
             .background(HawklyxDarkBackground)
             .verticalScroll(scrollState)
             .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Navigation Header
+        // Navigation Bar
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -74,7 +84,7 @@ fun AboutScreen(
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back to Home",
+                    contentDescription = "Return to Home",
                     tint = HawklyxTextPrimary
                 )
             }
@@ -86,59 +96,104 @@ fun AboutScreen(
             )
         }
 
-        // Section: Product Philosophy
-        AboutCard(
-            title = "PRODUCT PHILOSOPHY",
+        // Hero Brand Showcase Card
+        HeroBrandCard()
+
+        // Section: Product Purpose
+        AboutSectionCard(
+            title = "PURPOSE & PHILOSOPHY",
             icon = Icons.Default.Shield
         ) {
             Text(
-                text = "HAWKLYX combines Minimal Precision with Premium Finance. The Android home-screen widget is the core experience, built to present accurate Brent crude oil price observations at a glance without unnecessary clutter or dashboard bloat.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = HawklyxTextSecondary,
-                lineHeight = 22.sp
+                text = "HAWKLYX is a dedicated financial monitor engineered for rapid, glanceable awareness of global Brent crude oil prices.",
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    lineHeight = 22.sp,
+                    color = HawklyxTextSecondary
+                )
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Built on the philosophy of Minimal Precision, the experience prioritizes the home-screen widget as the primary interface, eliminating dashboard bloat, ads, tracking, and speculative clutter.",
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    lineHeight = 22.sp,
+                    color = HawklyxTextSecondary
+                )
             )
         }
 
-        // Section: Edge Architecture & Data Resilience
-        AboutCard(
-            title = "ARCHITECTURE & TRANSPARENCY",
-            icon = Icons.Default.CloudQueue
+        // Section: Architecture & Zero-Trust Security
+        AboutSectionCard(
+            title = "EDGE ARCHITECTURE & SECURITY",
+            icon = Icons.Default.Layers
         ) {
             Text(
-                text = "HAWKLYX implements a zero-trust client architecture. The Android application and widget never hold external API secrets directly.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = HawklyxTextSecondary,
-                lineHeight = 22.sp
+                text = "HAWKLYX enforces a zero-trust client model. Neither the Android app nor the widget stores API tokens or upstream keys.",
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    lineHeight = 22.sp,
+                    color = HawklyxTextSecondary
+                )
             )
             Spacer(modifier = Modifier.height(10.dp))
             Text(
-                text = "Data is routed through a resilient Cloudflare Worker edge service which coordinates an authorized multi-account key pool (50 requests/account daily quota, approved by OilPriceAPI support for personal non-commercial use), server-side cooldown, request coalescing, strict anomaly filtering, and last-known-good offline persistence.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = HawklyxTextSecondary,
-                lineHeight = 22.sp
+                text = "Requests route through a resilient Cloudflare Worker coordinated by a Durable Object. The coordinator manages an authorized multi-account pool, request coalescing, strict price sanity bounds ($10 to $250/bbl), and fail-closed security.",
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    lineHeight = 22.sp,
+                    color = HawklyxTextSecondary
+                )
             )
         }
 
-        // Section: Developer & Contact
-        AboutCard(
-            title = "CONTACT & ATTRIBUTION",
-            icon = Icons.Default.Email
+        // Section: Cadence & Freshness
+        AboutSectionCard(
+            title = "REFRESH CADENCE & QUOTA POLICIES",
+            icon = Icons.Default.Speed
         ) {
-            InfoLine(label = "Developer", value = "Ali Faniani")
-            InfoLine(label = "Contact Email", value = "ali.faniani@gmail.com")
-            InfoLine(label = "Data Provider", value = "OilPriceAPI (Personal / Educational)")
-            InfoLine(label = "License", value = "Personal, Non-Commercial Use")
+            SpecificationRow(label = "Background Cadence", value = "15-minute UTC schedule")
+            SpecificationRow(label = "Manual Refresh Limit", value = "3-minute cooldown")
+            SpecificationRow(label = "Account Quota Policy", value = "50 requests/account daily")
+            SpecificationRow(label = "Offline Fallback", value = "Last-known-good persistence")
         }
 
-        // Section: Version & System Details
-        AboutCard(
-            title = "APPLICATION DETAILS",
+        // Section: Project & Developer Links (Email replaced by clickable Portfolio & GitHub links)
+        AboutSectionCard(
+            title = "DEVELOPER & PROJECT LINKS",
+            icon = Icons.Default.Code
+        ) {
+            Text(
+                text = "Explore the creator's portfolio and the open-source GitHub repository below:",
+                style = MaterialTheme.typography.bodyMedium.copy(color = HawklyxTextSecondary)
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Portfolio Link Button
+            ExternalLinkTile(
+                icon = Icons.Default.Language,
+                title = "Ali Faniani — Portfolio",
+                url = "https://alifaniani.ir",
+                onClick = { uriHandler.openUri("https://alifaniani.ir") }
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // GitHub Repository Link Button
+            ExternalLinkTile(
+                icon = Icons.Default.Code,
+                title = "GitHub — Greenhawk5/HAWKLYX",
+                url = "https://github.com/Greenhawk5/HAWKLYX",
+                onClick = { uriHandler.openUri("https://github.com/Greenhawk5/HAWKLYX") }
+            )
+        }
+
+        // Section: Technical Specifications
+        AboutSectionCard(
+            title = "SYSTEM SPECIFICATIONS",
             icon = Icons.Default.Security
         ) {
-            InfoLine(label = "Application Version", value = "1.0 (Build 1)")
-            InfoLine(label = "Package ID", value = "ir.alifaniani.hawklyx")
-            InfoLine(label = "Target SDK", value = "Android 15 (API 37)")
-            InfoLine(label = "Minimum SDK", value = "Android 8.0 (API 26)")
+            SpecificationRow(label = "Application Version", value = "1.0 (Build 1)")
+            SpecificationRow(label = "Application ID", value = "ir.alifaniani.hawklyx")
+            SpecificationRow(label = "Target Android SDK", value = "Android 15 (API 37)")
+            SpecificationRow(label = "Minimum Android SDK", value = "Android 8.0 (API 26)")
+            SpecificationRow(label = "Data Provider", value = "OilPriceAPI (Personal License)")
         }
 
         Spacer(modifier = Modifier.height(20.dp))
@@ -146,7 +201,54 @@ fun AboutScreen(
 }
 
 @Composable
-private fun AboutCard(
+private fun HeroBrandCard() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(HawklyxSurface)
+            .border(1.dp, HawklyxBorder, RoundedCornerShape(20.dp))
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .size(72.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .background(HawklyxSurfaceVariant)
+                .border(1.dp, HawklyxBorder, RoundedCornerShape(18.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                painter = painterResource(id = R.drawable.hawklyx_logo),
+                contentDescription = "HAWKLYX Falcon Brand Mark",
+                modifier = Modifier.size(52.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        Text(
+            text = "HAWKLYX",
+            style = MaterialTheme.typography.headlineMedium.copy(
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 3.sp,
+                color = HawklyxTextPrimary
+            )
+        )
+
+        Text(
+            text = "Brent Crude Price Monitor",
+            style = MaterialTheme.typography.labelMedium.copy(
+                letterSpacing = 1.sp,
+                color = HawklyxEmerald
+            )
+        )
+    }
+}
+
+@Composable
+private fun AboutSectionCard(
     title: String,
     icon: ImageVector,
     content: @Composable () -> Unit
@@ -196,7 +298,7 @@ private fun AboutCard(
 }
 
 @Composable
-private fun InfoLine(label: String, value: String) {
+private fun SpecificationRow(label: String, value: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -206,15 +308,69 @@ private fun InfoLine(label: String, value: String) {
     ) {
         Text(
             text = label,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
             color = HawklyxTextMuted
         )
         Text(
             text = value,
             style = MaterialTheme.typography.bodyMedium.copy(
+                fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
                 color = HawklyxTextPrimary
             )
+        )
+    }
+}
+
+@Composable
+private fun ExternalLinkTile(
+    icon: ImageVector,
+    title: String,
+    url: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(HawklyxSurfaceVariant)
+            .border(1.dp, HawklyxBorder, RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = HawklyxEmerald,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontWeight = FontWeight.SemiBold,
+                        color = HawklyxTextPrimary
+                    )
+                )
+                Text(
+                    text = url,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 11.sp,
+                        color = HawklyxTextMuted
+                    )
+                )
+            }
+        }
+
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+            contentDescription = "Open $title in browser",
+            tint = HawklyxTextSecondary,
+            modifier = Modifier.size(16.dp)
         )
     }
 }

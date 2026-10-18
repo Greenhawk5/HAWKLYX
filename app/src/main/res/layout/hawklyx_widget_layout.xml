@@ -6,7 +6,7 @@
     android:background="@drawable/hawklyx_widget_bg"
     android:padding="14dp">
 
-    <!-- Header Row: Instrument label, Freshness badge, Refresh button -->
+    <!-- Header Row: Brand Icon, Title, Freshness Badge, Refresh Action -->
     <LinearLayout
         android:id="@+id/widget_header"
         android:layout_width="match_parent"
@@ -17,21 +17,21 @@
 
         <ImageView
             android:id="@+id/widget_icon"
-            android:layout_width="14dp"
-            android:layout_height="14dp"
-            android:contentDescription="@string/instrument_brent"
-            android:src="@drawable/ic_oil_barrel" />
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:contentDescription="@string/app_name"
+            android:src="@drawable/hawklyx_icon_small" />
 
         <TextView
             android:id="@+id/widget_title"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
+            android:layout_marginStart="8dp"
             android:layout_weight="1"
             android:ellipsize="end"
             android:letterSpacing="0.08"
             android:maxLines="1"
-            android:text="@string/instrument_brent"
+            android:text="HAWKLYX • BRENT"
             android:textColor="@color/hawklyx_text_secondary"
             android:textSize="11sp"
             android:textStyle="bold" />
@@ -42,10 +42,10 @@
             android:layout_height="wrap_content"
             android:layout_marginEnd="6dp"
             android:background="@drawable/hawklyx_badge_bg"
-            android:paddingStart="6dp"
-            android:paddingTop="2dp"
-            android:paddingEnd="6dp"
-            android:paddingBottom="2dp"
+            android:paddingStart="7dp"
+            android:paddingTop="3dp"
+            android:paddingEnd="7dp"
+            android:paddingBottom="3dp"
             android:text="@string/status_fresh"
             android:textColor="@color/hawklyx_emerald"
             android:textSize="9sp"
@@ -57,7 +57,7 @@
             android:layout_height="32dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
             android:contentDescription="@string/tap_to_refresh"
-            android:padding="4dp"
+            android:padding="5dp"
             android:scaleType="centerInside"
             android:src="@drawable/ic_refresh" />
     </LinearLayout>
@@ -68,7 +68,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_below="@id/widget_header"
-        android:layout_marginTop="4dp"
+        android:layout_marginTop="6dp"
         android:gravity="bottom"
         android:orientation="horizontal">
 
@@ -93,7 +93,7 @@
             android:textSize="11sp" />
     </LinearLayout>
 
-    <!-- Footer Row: Last observation timestamp & non-intrusive status note -->
+    <!-- Footer Row: Last observation timestamp & status / cooldown note -->
     <LinearLayout
         android:id="@+id/widget_footer"
         android:layout_width="match_parent"

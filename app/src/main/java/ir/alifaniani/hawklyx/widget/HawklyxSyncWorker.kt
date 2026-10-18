@@ -13,7 +13,11 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Background WorkManager task for periodic synchronization of the Brent Crude price.
- * Respects Android doze mode, battery preservation, and network constraints.
+ * Configured for the standard 15-minute interval aligned with the edge service cadence.
+ *
+ * NOTE on Android WorkManager execution:
+ * PeriodicWorkRequest adheres to Android OS battery optimizations and Doze mode.
+ * Execution may flex within the specified window rather than firing at exact millisecond boundaries.
  */
 class HawklyxSyncWorker(
     appContext: Context,
@@ -36,11 +40,11 @@ class HawklyxSyncWorker(
         fun schedulePeriodicSync(context: Context) {
             val constraints = Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)
-                .setRequiresBatteryNotLow(true)
                 .build()
 
+            // Android WorkManager minimum periodic interval is 15 minutes
             val syncRequest = PeriodicWorkRequestBuilder<HawklyxSyncWorker>(
-                30, TimeUnit.MINUTES,
+                15, TimeUnit.MINUTES,
                 5, TimeUnit.MINUTES // flex interval
             )
                 .setConstraints(constraints)
@@ -48,7 +52,7 @@ class HawklyxSyncWorker(
 
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 UNIQUE_WORK_NAME,
-                ExistingPeriodicWorkPolicy.KEEP,
+                ExistingPeriodicWorkPolicy.UPDATE,
                 syncRequest
             )
         }

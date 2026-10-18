@@ -23,6 +23,8 @@ import ir.alifaniani.hawklyx.ui.screens.HomeScreen
 import ir.alifaniani.hawklyx.ui.theme.HAWKLYXTheme
 import ir.alifaniani.hawklyx.ui.theme.HawklyxDarkBackground
 import ir.alifaniani.hawklyx.widget.HawklyxSyncWorker
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 sealed class Screen {
@@ -40,7 +42,7 @@ class MainActivity : ComponentActivity() {
 
         repository = HawklyxRepository.getInstance(applicationContext)
 
-        // Schedule periodic battery-efficient background updates
+        // Schedule periodic WorkManager background synchronization (15-min cadence)
         HawklyxSyncWorker.schedulePeriodicSync(applicationContext)
 
         setContent {
@@ -49,10 +51,17 @@ class MainActivity : ComponentActivity() {
                 val coroutineScope = rememberCoroutineScope()
                 var currentScreen by remember { mutableStateOf<Screen>(Screen.Home) }
 
-                // Automatically attempt fresh sync on launch if no data is present yet
+                // Synchronize on launch (non-forced to leverage edge cache if fresh)
                 LaunchedEffect(Unit) {
-                    if (uiState.observation == null) {
-                        repository.refreshPrice(force = false)
+                    repository.refreshPrice(force = false)
+                }
+
+                // Deterministic 1-second countdown ticker for cooldown and scheduled cadence
+                // Lifecycle-aware: automatically suspends when activity is stopped or disposed
+                LaunchedEffect(Unit) {
+                    while (isActive) {
+                        repository.updateCountdowns()
+                        delay(1000L)
                     }
                 }
 
@@ -62,7 +71,7 @@ class MainActivity : ComponentActivity() {
                 ) { innerPadding ->
                     Crossfade(
                         targetState = currentScreen,
-                        label = "screen_transition",
+                        label = "screen_navigation",
                         modifier = Modifier.padding(innerPadding)
                     ) { screen ->
                         when (screen) {

@@ -6,7 +6,6 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.view.View
 import android.widget.RemoteViews
 import androidx.core.content.ContextCompat
 import ir.alifaniani.hawklyx.MainActivity
@@ -19,16 +18,14 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.util.Date
 import java.util.Locale
 
 /**
  * Android Home-Screen Widget Provider for HAWKLYX.
- * The primary user experience for glanceable Brent crude oil prices.
+ * The primary user experience for glanceable, resilient Brent crude oil prices.
  */
 class HawklyxWidgetProvider : AppWidgetProvider() {
 
@@ -55,6 +52,21 @@ class HawklyxWidgetProvider : AppWidgetProvider() {
             val allIds = appWidgetManager.getAppWidgetIds(thisWidget)
             val prefs = HawklyxPreferences(context)
             val observation = prefs.getLastObservation()
+            val now = System.currentTimeMillis()
+            val nextAllowed = prefs.getNextRefreshAllowedTimeMs()
+
+            // Respect 3-minute manual cooldown in widget
+            if (now < nextAllowed) {
+                val remainingSec = ((nextAllowed - now) / 1000).toInt().coerceAtLeast(1)
+                for (id in allIds) {
+                    val views = RemoteViews(context.packageName, R.layout.hawklyx_widget_layout)
+                    setupClickIntents(context, views, id)
+                    bindWidgetContent(context, views, observation, prefs.getLastStatus(), isRefreshing = false)
+                    views.setTextViewText(R.id.widget_status_msg, "Cooldown (${remainingSec}s)")
+                    appWidgetManager.updateAppWidget(id, views)
+                }
+                return
+            }
 
             // Immediately reflect refreshing state on screen
             for (id in allIds) {
@@ -94,7 +106,12 @@ class HawklyxWidgetProvider : AppWidgetProvider() {
             isRefreshing: Boolean
         ) {
             val views = RemoteViews(context.packageName, R.layout.hawklyx_widget_layout)
+            setupClickIntents(context, views, appWidgetId)
+            bindWidgetContent(context, views, observation, status, isRefreshing)
+            appWidgetManager.updateAppWidget(appWidgetId, views)
+        }
 
+        private fun setupClickIntents(context: Context, views: RemoteViews, appWidgetId: Int) {
             // Setup Main Click -> Open MainActivity
             val mainIntent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -118,13 +135,19 @@ class HawklyxWidgetProvider : AppWidgetProvider() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             views.setOnClickPendingIntent(R.id.widget_btn_refresh, refreshPendingIntent)
+        }
 
+        private fun bindWidgetContent(
+            context: Context,
+            views: RemoteViews,
+            observation: BrentPriceObservation?,
+            status: DataFreshnessStatus,
+            isRefreshing: Boolean
+        ) {
             // Price & Currency display
             if (observation != null) {
                 views.setTextViewText(R.id.widget_price, observation.formatted)
                 views.setTextViewText(R.id.widget_unit, observation.unit)
-
-                // Timestamp formatting
                 val formattedTime = formatObservationTime(observation.asOf)
                 views.setTextViewText(R.id.widget_updated, "Observed: $formattedTime")
             } else {
@@ -133,10 +156,10 @@ class HawklyxWidgetProvider : AppWidgetProvider() {
                 views.setTextViewText(R.id.widget_updated, "Awaiting first sync")
             }
 
-            // Status Badge & Color
+            // Status Badge & Footer
             if (isRefreshing) {
                 views.setTextViewText(R.id.widget_status_badge, context.getString(R.string.status_refreshing))
-                views.setTextColor(R.id.widget_status_badge, ContextCompat.getColor(context, R.color.hawklyx_text_secondary))
+                views.setTextColor(R.id.widget_status_badge, ContextCompat.getColor(context, R.color.hawklyx_emerald))
                 views.setTextViewText(R.id.widget_status_msg, "Syncing...")
             } else {
                 when (status) {
@@ -153,7 +176,7 @@ class HawklyxWidgetProvider : AppWidgetProvider() {
                     DataFreshnessStatus.QUOTA_EXHAUSTED -> {
                         views.setTextViewText(R.id.widget_status_badge, context.getString(R.string.status_quota_limit))
                         views.setTextColor(R.id.widget_status_badge, ContextCompat.getColor(context, R.color.hawklyx_red))
-                        views.setTextViewText(R.id.widget_status_msg, "Daily limit reached")
+                        views.setTextViewText(R.id.widget_status_msg, "Daily limit")
                     }
                     DataFreshnessStatus.PROVIDER_UNAVAILABLE, DataFreshnessStatus.INVALID_RESPONSE -> {
                         views.setTextViewText(R.id.widget_status_badge, context.getString(R.string.status_unavailable))
@@ -167,32 +190,22 @@ class HawklyxWidgetProvider : AppWidgetProvider() {
                     }
                     DataFreshnessStatus.REFRESHING -> {
                         views.setTextViewText(R.id.widget_status_badge, context.getString(R.string.status_refreshing))
-                        views.setTextColor(R.id.widget_status_badge, ContextCompat.getColor(context, R.color.hawklyx_text_secondary))
+                        views.setTextColor(R.id.widget_status_badge, ContextCompat.getColor(context, R.color.hawklyx_emerald))
                         views.setTextViewText(R.id.widget_status_msg, "Syncing...")
                     }
                 }
             }
-
-            appWidgetManager.updateAppWidget(appWidgetId, views)
         }
 
         private fun formatObservationTime(asOfIso: String): String {
             if (asOfIso.isBlank()) return "Recently"
             return try {
                 val instant = Instant.parse(asOfIso)
-                val formatter = DateTimeFormatter.ofPattern("HH:mm", Locale.getDefault())
+                val formatter = DateTimeFormatter.ofPattern("HH:mm (z)", Locale.getDefault())
                     .withZone(ZoneId.systemDefault())
                 formatter.format(instant)
             } catch (_: Exception) {
-                // Fallback to simple date parsing
-                try {
-                    val sdfIn = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
-                    val date = sdfIn.parse(asOfIso) ?: Date()
-                    val sdfOut = SimpleDateFormat("HH:mm", Locale.getDefault())
-                    sdfOut.format(date)
-                } catch (_: Exception) {
-                    asOfIso.take(16).replace("T", " ")
-                }
+                asOfIso.take(16).replace("T", " ")
             }
         }
     }

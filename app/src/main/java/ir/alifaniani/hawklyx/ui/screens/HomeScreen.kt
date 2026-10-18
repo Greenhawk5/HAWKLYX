@@ -7,6 +7,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -25,11 +26,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -42,13 +45,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ir.alifaniani.hawklyx.R
 import ir.alifaniani.hawklyx.data.model.BrentPriceObservation
 import ir.alifaniani.hawklyx.data.model.DataFreshnessStatus
 import ir.alifaniani.hawklyx.data.model.PriceUiState
+import ir.alifaniani.hawklyx.data.schedule.UtcRefreshSchedule
+import ir.alifaniani.hawklyx.ui.components.HawklyxCircleLoader
+import ir.alifaniani.hawklyx.ui.components.HawklyxCooldownProgress
+import ir.alifaniani.hawklyx.ui.components.MarketHistoryChart
 import ir.alifaniani.hawklyx.ui.theme.HawklyxAmber
 import ir.alifaniani.hawklyx.ui.theme.HawklyxBorder
 import ir.alifaniani.hawklyx.ui.theme.HawklyxDarkBackground
@@ -79,26 +88,36 @@ fun HomeScreen(
             .background(HawklyxDarkBackground)
             .verticalScroll(scrollState)
             .padding(horizontal = 20.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp)
+        verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        // Top App Bar / Branding
+        // 1. Top Branding & About action
         TopBrandingHeader(onNavigateToAbout = onNavigateToAbout)
 
-        // Hero Brent Crude Price Card
-        HeroPriceCard(
-            observation = uiState.observation,
-            status = uiState.status,
-            isRefreshing = uiState.isRefreshing,
-            cooldownRemainingSeconds = uiState.cooldownRemainingSeconds,
-            message = uiState.message,
-            onRefresh = onRefresh
-        )
+        // 2. Initial Loading state when awaiting first sync without cached data
+        if (uiState.observation == null && uiState.isRefreshing) {
+            InitialLoadingCard()
+        } else {
+            // 3. Dominant Hero Brent Crude Price Card
+            HeroPriceCard(
+                uiState = uiState,
+                onRefresh = onRefresh
+            )
 
-        // Market Specifications & Attribution Card
-        MarketSpecificationsCard(observation = uiState.observation)
+            // 4. UTC Quarter-Hour Scheduled Cadence Card
+            ScheduledCadenceCard(uiState = uiState)
 
-        // Home Widget Setup Guide Card
-        WidgetGuideCard()
+            // 5. Market History Chart (Area/Line with genuine observations)
+            MarketHistoryChart(
+                history = uiState.history,
+                currentObservation = uiState.observation
+            )
+
+            // 6. Market Provenance & Architecture Specifications
+            MarketProvenanceCard(observation = uiState.observation)
+
+            // 7. Home-Screen Widget Guide
+            WidgetGuideCard()
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
     }
@@ -113,15 +132,23 @@ private fun TopBrandingHeader(onNavigateToAbout: () -> Unit) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(10.dp)
-                        .clip(CircleShape)
-                        .background(HawklyxEmerald)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(HawklyxSurfaceVariant)
+                    .border(1.dp, HawklyxBorder, RoundedCornerShape(10.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.hawklyx_icon_small),
+                    contentDescription = "HAWKLYX Logo",
+                    modifier = Modifier.size(24.dp)
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column {
                 Text(
                     text = "HAWKLYX",
                     style = MaterialTheme.typography.titleLarge.copy(
@@ -130,15 +157,14 @@ private fun TopBrandingHeader(onNavigateToAbout: () -> Unit) {
                         color = HawklyxTextPrimary
                     )
                 )
+                Text(
+                    text = "Brent Crude Price Monitor",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        letterSpacing = 0.5.sp,
+                        color = HawklyxTextSecondary
+                    )
+                )
             }
-            Text(
-                text = "Brent Crude Price Monitor",
-                style = MaterialTheme.typography.labelSmall.copy(
-                    letterSpacing = 0.5.sp,
-                    color = HawklyxTextSecondary
-                ),
-                modifier = Modifier.padding(start = 18.dp)
-            )
         }
 
         IconButton(
@@ -150,7 +176,7 @@ private fun TopBrandingHeader(onNavigateToAbout: () -> Unit) {
         ) {
             Icon(
                 imageVector = Icons.Default.Info,
-                contentDescription = "About HAWKLYX",
+                contentDescription = "About HAWKLYX and Architecture",
                 tint = HawklyxTextSecondary
             )
         }
@@ -158,15 +184,48 @@ private fun TopBrandingHeader(onNavigateToAbout: () -> Unit) {
 }
 
 @Composable
+private fun InitialLoadingCard() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(HawklyxSurface)
+            .border(1.dp, HawklyxBorder, RoundedCornerShape(20.dp))
+            .padding(36.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            HawklyxCircleLoader(size = 54.dp, strokeWidth = 3.5.dp)
+            Text(
+                text = "Connecting to HAWKLYX Edge Service...",
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontWeight = FontWeight.Medium,
+                    color = HawklyxTextPrimary
+                )
+            )
+            Text(
+                text = "Synchronizing with Cloudflare edge coordinator",
+                style = MaterialTheme.typography.labelSmall.copy(color = HawklyxTextMuted)
+            )
+        }
+    }
+}
+
+@Composable
 private fun HeroPriceCard(
-    observation: BrentPriceObservation?,
-    status: DataFreshnessStatus,
-    isRefreshing: Boolean,
-    cooldownRemainingSeconds: Int,
-    message: String,
+    uiState: PriceUiState,
     onRefresh: () -> Unit
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val observation = uiState.observation
+    val status = uiState.status
+    val isRefreshing = uiState.isRefreshing
+    val cooldownSec = uiState.cooldownRemainingSeconds
+    val isCooldownActive = cooldownSec > 0
+
+    val infiniteTransition = rememberInfiniteTransition(label = "badge_pulse")
     val pulseAlpha by infiniteTransition.animateFloat(
         initialValue = 0.4f,
         targetValue = 1f,
@@ -183,7 +242,7 @@ private fun HeroPriceCard(
             .clip(RoundedCornerShape(20.dp))
             .background(HawklyxSurface)
             .border(1.dp, HawklyxBorder, RoundedCornerShape(20.dp))
-            .padding(24.dp)
+            .padding(22.dp)
     ) {
         Column {
             // Card Header: Instrument title & Status Badge
@@ -201,11 +260,10 @@ private fun HeroPriceCard(
                     )
                 )
 
-                // Freshness Badge
                 StatusBadge(status = status, isRefreshing = isRefreshing, pulseAlpha = pulseAlpha)
             }
 
-            Spacer(modifier = Modifier.height(18.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Dominant Price Display
             Row(
@@ -234,52 +292,31 @@ private fun HeroPriceCard(
             HorizontalDivider(color = HawklyxBorder, thickness = 1.dp)
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Timestamps Breakdown
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column {
-                    Text(
-                        text = "Source Observation",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = HawklyxTextMuted
-                    )
-                    Text(
-                        text = formatIsoTimestamp(observation?.asOf),
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontWeight = FontWeight.Medium,
-                            color = HawklyxTextPrimary
-                        )
-                    )
-                }
-
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        text = "Last Edge Sync",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = HawklyxTextMuted
-                    )
-                    Text(
-                        text = formatIsoTimestamp(observation?.fetchedAt),
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontWeight = FontWeight.Medium,
-                            color = HawklyxTextPrimary
-                        )
-                    )
-                }
+            // Timestamps Breakdown: Redesigned as distinct information tiles to eliminate overlap
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                TimestampTile(
+                    icon = Icons.Default.AccessTime,
+                    label = "Source Market Observation",
+                    timestamp = formatIsoTimestamp(observation?.asOf),
+                    sublabel = "Original provider benchmark timestamp"
+                )
+                TimestampTile(
+                    icon = Icons.Default.CloudDone,
+                    label = "Last Edge Coordination",
+                    timestamp = formatIsoTimestamp(observation?.fetchedAt),
+                    sublabel = "Cloudflare edge validation time"
+                )
             }
 
             Spacer(modifier = Modifier.height(20.dp))
 
             // Refresh Control Button
-            val isCooldownActive = cooldownRemainingSeconds > 0
             ElevatedButton(
                 onClick = onRefresh,
                 enabled = !isRefreshing && !isCooldownActive,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(48.dp),
+                    .height(50.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.elevatedButtonColors(
                     containerColor = HawklyxEmerald,
@@ -288,46 +325,49 @@ private fun HeroPriceCard(
                     disabledContentColor = HawklyxTextMuted
                 )
             ) {
-                if (isRefreshing) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp,
-                        color = HawklyxEmerald
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = "Syncing with edge...",
-                        style = MaterialTheme.typography.labelLarge.copy(color = HawklyxTextSecondary)
-                    )
-                } else if (isCooldownActive) {
-                    Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                        tint = HawklyxTextMuted
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Refresh Cooldown (${cooldownRemainingSeconds}s)",
-                        style = MaterialTheme.typography.labelLarge.copy(color = HawklyxTextMuted)
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Refresh Price Now",
-                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
-                    )
+                when {
+                    isRefreshing -> {
+                        HawklyxCircleLoader(size = 20.dp, strokeWidth = 2.dp)
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "Syncing with edge...",
+                            style = MaterialTheme.typography.labelLarge.copy(
+                                fontWeight = FontWeight.SemiBold,
+                                color = HawklyxTextSecondary
+                            )
+                        )
+                    }
+                    isCooldownActive -> {
+                        val progress = (cooldownSec.toFloat() / 180f).coerceIn(0f, 1f)
+                        HawklyxCooldownProgress(
+                            progress = progress,
+                            size = 18.dp,
+                            color = HawklyxTextMuted
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "Next manual refresh in ${UtcRefreshSchedule.formatRemaining(cooldownSec)}",
+                            style = MaterialTheme.typography.labelLarge.copy(color = HawklyxTextMuted)
+                        )
+                    }
+                    else -> {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Refresh Price",
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Refresh Price Now",
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
+                        )
+                    }
                 }
             }
 
-            AnimatedVisibility(visible = message.isNotBlank()) {
+            AnimatedVisibility(visible = uiState.message.isNotBlank()) {
                 Text(
-                    text = message,
+                    text = uiState.message,
                     style = MaterialTheme.typography.bodyMedium.copy(
                         fontSize = 12.sp,
                         color = HawklyxTextMuted
@@ -342,13 +382,144 @@ private fun HeroPriceCard(
 }
 
 @Composable
+private fun TimestampTile(
+    icon: ImageVector,
+    label: String,
+    timestamp: String,
+    sublabel: String
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(HawklyxSurfaceVariant)
+            .border(1.dp, HawklyxBorder, RoundedCornerShape(10.dp))
+            .padding(10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(HawklyxSurface),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = HawklyxEmerald,
+                modifier = Modifier.size(16.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.width(10.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = FontWeight.Medium,
+                    color = HawklyxTextSecondary
+                )
+            )
+            Text(
+                text = sublabel,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 10.sp,
+                    color = HawklyxTextMuted
+                )
+            )
+        }
+
+        Text(
+            text = timestamp,
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontWeight = FontWeight.Bold,
+                color = HawklyxTextPrimary
+            )
+        )
+    }
+}
+
+@Composable
+private fun ScheduledCadenceCard(uiState: PriceUiState) {
+    val cadenceFormatted = UtcRefreshSchedule.formatRemaining(uiState.cadenceRemainingSeconds)
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(HawklyxSurface)
+            .border(1.dp, HawklyxBorder, RoundedCornerShape(16.dp))
+            .padding(18.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(HawklyxSurfaceVariant),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Schedule,
+                        contentDescription = null,
+                        tint = HawklyxEmerald,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                    Text(
+                        text = "SCHEDULED EDGE CADENCE",
+                        style = MaterialTheme.typography.labelLarge.copy(
+                            letterSpacing = 1.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = HawklyxTextSecondary
+                        )
+                    )
+                    Text(
+                        text = "UTC quarter-hour schedule (:00, :15, :30, :45)",
+                        style = MaterialTheme.typography.labelSmall.copy(color = HawklyxTextMuted)
+                    )
+                }
+            }
+
+            Text(
+                text = cadenceFormatted,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    color = HawklyxEmerald
+                )
+            )
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Text(
+            text = "Background synchronization uses Android WorkManager aligned to the edge cadence. OS battery preservation and Doze mode may batch requests within the 15-minute window.",
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontSize = 11.sp,
+                lineHeight = 16.sp,
+                color = HawklyxTextMuted
+            )
+        )
+    }
+}
+
+@Composable
 private fun StatusBadge(
     status: DataFreshnessStatus,
     isRefreshing: Boolean,
     pulseAlpha: Float
 ) {
     val (label, dotColor) = when {
-        isRefreshing -> "SYNCING" to HawklyxTextSecondary
+        isRefreshing -> "SYNCING" to HawklyxEmerald
         status == DataFreshnessStatus.FRESH -> "LIVE" to HawklyxEmerald
         status == DataFreshnessStatus.STALE -> "STALE" to HawklyxAmber
         status == DataFreshnessStatus.QUOTA_EXHAUSTED -> "QUOTA LIMIT" to HawklyxRed
@@ -367,7 +538,7 @@ private fun StatusBadge(
         Box(
             modifier = Modifier
                 .size(7.dp)
-                .alpha(if (status == DataFreshnessStatus.FRESH) pulseAlpha else 1f)
+                .alpha(if (status == DataFreshnessStatus.FRESH || isRefreshing) pulseAlpha else 1f)
                 .clip(CircleShape)
                 .background(dotColor)
         )
@@ -383,7 +554,7 @@ private fun StatusBadge(
 }
 
 @Composable
-private fun MarketSpecificationsCard(observation: BrentPriceObservation?) {
+private fun MarketProvenanceCard(observation: BrentPriceObservation?) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -391,10 +562,10 @@ private fun MarketSpecificationsCard(observation: BrentPriceObservation?) {
             .background(HawklyxSurface)
             .border(1.dp, HawklyxBorder, RoundedCornerShape(16.dp))
             .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Text(
-            text = "MARKET PROVENANCE",
+            text = "MARKET SPECIFICATIONS",
             style = MaterialTheme.typography.labelLarge.copy(
                 letterSpacing = 1.sp,
                 fontWeight = FontWeight.Bold,
@@ -402,29 +573,33 @@ private fun MarketSpecificationsCard(observation: BrentPriceObservation?) {
             )
         )
 
-        SpecRow(label = "Commodity Code", value = observation?.code ?: "BRENT_CRUDE_USD")
-        SpecRow(label = "Instrument Name", value = observation?.name ?: "Brent Crude Oil")
-        SpecRow(label = "Currency & Unit", value = "USD per barrel (bbl)")
-        SpecRow(label = "Edge Upstream Source", value = observation?.source ?: "OilPriceAPI")
-        SpecRow(label = "Edge Refresh Schedule", value = "15-minute cadence (3-min manual cooldown)")
+        ProvenanceRow(label = "Commodity Benchmark", value = observation?.name ?: "Brent Crude Oil")
+        ProvenanceRow(label = "Contract Symbol", value = observation?.code ?: "BRENT_CRUDE_USD")
+        ProvenanceRow(label = "Denomination", value = "USD per barrel (bbl)")
+        ProvenanceRow(label = "Edge Upstream Source", value = observation?.source ?: "OilPriceAPI")
+        ProvenanceRow(label = "Edge Coordination", value = "Cloudflare Durable Object")
+        ProvenanceRow(label = "Refresh Schedule", value = "15-min UTC cadence (3-min cooldown)")
     }
 }
 
 @Composable
-private fun SpecRow(label: String, value: String) {
+private fun ProvenanceRow(label: String, value: String) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 3.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = label,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
             color = HawklyxTextMuted
         )
         Text(
             text = value,
             style = MaterialTheme.typography.bodyMedium.copy(
+                fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
                 color = HawklyxTextPrimary
             )
@@ -469,7 +644,7 @@ private fun WidgetGuideCard() {
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
-                text = "Long-press your home screen and add the HAWKLYX widget for instant glanceable updates.",
+                text = "Long-press your home screen to add the 3x2 HAWKLYX widget for instant glanceable Brent crude monitoring.",
                 style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
                 color = HawklyxTextSecondary
             )

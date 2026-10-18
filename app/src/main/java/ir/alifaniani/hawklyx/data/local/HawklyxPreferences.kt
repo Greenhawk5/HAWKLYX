@@ -4,10 +4,13 @@ import android.content.Context
 import android.content.SharedPreferences
 import ir.alifaniani.hawklyx.data.model.BrentPriceObservation
 import ir.alifaniani.hawklyx.data.model.DataFreshnessStatus
+import ir.alifaniani.hawklyx.data.model.HistoricalObservationPoint
+import org.json.JSONArray
+import org.json.JSONObject
 
 /**
- * Robust local persistence for the last-known-good price observation.
- * Ensures the app and home-screen widget immediately show the last valid data
+ * Robust local persistence for the last-known-good price observation and genuine historical points.
+ * Ensures the app and home-screen widget immediately display valid data
  * upon restart, device reboot, or network failure.
  */
 class HawklyxPreferences(context: Context) {
@@ -22,6 +25,7 @@ class HawklyxPreferences(context: Context) {
         status: DataFreshnessStatus,
         nextRefreshAllowedTimeMs: Long
     ) {
+        val now = System.currentTimeMillis()
         prefs.edit().apply {
             putString(KEY_CODE, observation.code)
             putString(KEY_NAME, observation.name)
@@ -38,9 +42,19 @@ class HawklyxPreferences(context: Context) {
             putString(KEY_SOURCE, observation.source)
             putString(KEY_STATUS, status.name)
             putLong(KEY_NEXT_REFRESH_ALLOWED, nextRefreshAllowedTimeMs)
-            putLong(KEY_LAST_FETCH_TIME, System.currentTimeMillis())
+            putLong(KEY_LAST_FETCH_TIME, now)
             apply()
         }
+
+        // Record genuine historical observation
+        recordHistoricalPoint(
+            HistoricalObservationPoint(
+                timestampMs = now,
+                price = observation.price,
+                formatted = observation.formatted,
+                asOfIso = observation.asOf
+            )
+        )
     }
 
     fun saveStatusOnly(status: DataFreshnessStatus, nextRefreshAllowedTimeMs: Long) {
@@ -56,7 +70,7 @@ class HawklyxPreferences(context: Context) {
             return null
         }
         val price = prefs.getFloat(KEY_PRICE, 0f).toDouble()
-        if (price <= 0.0) return null
+        if (price <= 0.0 || price.isNaN() || price.isInfinite()) return null
 
         return BrentPriceObservation(
             code = prefs.getString(KEY_CODE, "BRENT_CRUDE_USD") ?: "BRENT_CRUDE_USD",
@@ -92,12 +106,66 @@ class HawklyxPreferences(context: Context) {
         return prefs.getLong(KEY_LAST_FETCH_TIME, 0L)
     }
 
+    fun getHistoricalPoints(): List<HistoricalObservationPoint> {
+        val jsonStr = prefs.getString(KEY_HISTORY, null) ?: return emptyList()
+        return try {
+            val array = JSONArray(jsonStr)
+            val list = mutableListOf<HistoricalObservationPoint>()
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                list.add(
+                    HistoricalObservationPoint(
+                        timestampMs = obj.getLong("t"),
+                        price = obj.getDouble("p"),
+                        formatted = obj.getString("f"),
+                        asOfIso = obj.optString("a", "")
+                    )
+                )
+            }
+            list
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun recordHistoricalPoint(point: HistoricalObservationPoint) {
+        try {
+            val existing = getHistoricalPoints().toMutableList()
+            // Deduplicate: avoid appending identical observation
+            val lastPoint = existing.lastOrNull()
+            if (lastPoint != null && (lastPoint.asOfIso == point.asOfIso || (lastPoint.price == point.price && (point.timestampMs - lastPoint.timestampMs < 300_000L)))) {
+                return
+            }
+            existing.add(point)
+            // Limit to most recent MAX_HISTORY_POINTS
+            val trimmed = if (existing.size > MAX_HISTORY_POINTS) {
+                existing.takeLast(MAX_HISTORY_POINTS)
+            } else {
+                existing
+            }
+
+            val array = JSONArray()
+            for (p in trimmed) {
+                val obj = JSONObject()
+                obj.put("t", p.timestampMs)
+                obj.put("p", p.price)
+                obj.put("f", p.formatted)
+                obj.put("a", p.asOfIso)
+                array.put(obj)
+            }
+            prefs.edit().putString(KEY_HISTORY, array.toString()).apply()
+        } catch (_: Exception) {
+            // Non-critical persistence failure
+        }
+    }
+
     fun clear() {
         prefs.edit().clear().apply()
     }
 
     companion object {
         private const val PREFS_NAME = "hawklyx_price_cache"
+        private const val MAX_HISTORY_POINTS = 100
 
         private const val KEY_CODE = "code"
         private const val KEY_NAME = "name"
@@ -115,5 +183,6 @@ class HawklyxPreferences(context: Context) {
         private const val KEY_STATUS = "status"
         private const val KEY_NEXT_REFRESH_ALLOWED = "next_refresh_allowed"
         private const val KEY_LAST_FETCH_TIME = "last_fetch_time"
+        private const val KEY_HISTORY = "history_json"
     }
 }
