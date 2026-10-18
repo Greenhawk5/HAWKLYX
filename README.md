@@ -75,13 +75,14 @@ HAWKLYX/
 │       └── xml/network_security_config.xml
 ├── backend/worker/                   # Cloudflare Worker edge service
 │   ├── src/
+│   │   ├── coordinator.ts            # Durable Object atomic coordinator (SQLite persistence)
 │   │   ├── account-pool.ts           # Multi-account rotation & quota manager
 │   │   ├── cache.ts                  # Cache, coalescing & cooldown engine
 │   │   ├── index.ts                  # Worker fetch router (/api/v1/price/latest, /health)
 │   │   ├── provider.ts               # OilPriceAPI adapter & validation
 │   │   └── types.ts                  # Upstream & client data contracts
 │   ├── test/                         # Comprehensive Vitest unit & integration tests
-│   ├── wrangler.jsonc                # Cloudflare Worker configuration
+│   ├── wrangler.jsonc                # Cloudflare Worker configuration (DO & SQLite migrations)
 │   └── .dev.vars.example             # Local secrets template (placeholders only)
 └── README.md
 ```

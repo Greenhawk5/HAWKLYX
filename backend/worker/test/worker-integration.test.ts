@@ -1,20 +1,92 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { HawklyxCoordinator } from "../src/coordinator";
 import worker from "../src/index";
 import { Env, HawklyxPriceResponse, HealthStatusResponse } from "../src/types";
+import { createMockDurableObjectState, MockSqlStorageEngine } from "./test-helpers";
 
 describe("Worker Endpoints Integration", () => {
-  const mockEnv: Env = {
-    OILPRICEAPI_KEY_1: "test_key_1",
-    OILPRICEAPI_KEY_2: "test_key_2",
-    DEFAULT_UPSTREAM_INTERVAL_MINUTES: "15",
-    MANUAL_REFRESH_COOLDOWN_SECONDS: "180",
-    MAX_DAILY_QUOTA_PER_ACCOUNT: "50",
-    GLOBAL_DAILY_BUDGET: "200",
-  };
+  let baseEnv: Env;
+  let coordinator: HawklyxCoordinator;
+  let envWithDO: Env;
+
+  function createDOBinding(inst: any): DurableObjectNamespace {
+    return {
+      getByName: vi.fn().mockReturnValue(inst),
+      idFromName: vi.fn(),
+      idFromString: vi.fn(),
+      get: vi.fn().mockReturnValue(inst),
+      jurisdiction: vi.fn(),
+    } as unknown as DurableObjectNamespace;
+  }
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    baseEnv = {
+      OILPRICEAPI_KEY_1: "test_key_1",
+      OILPRICEAPI_KEY_2: "test_key_2",
+      DEFAULT_UPSTREAM_INTERVAL_MINUTES: "15",
+      MANUAL_REFRESH_COOLDOWN_SECONDS: "180",
+      MAX_DAILY_QUOTA_PER_ACCOUNT: "50",
+      GLOBAL_DAILY_BUDGET: "200",
+    };
+
+    const storage = new MockSqlStorageEngine();
+    const state = createMockDurableObjectState(storage);
+    coordinator = new HawklyxCoordinator(state, baseEnv);
+
+    envWithDO = {
+      ...baseEnv,
+      COORDINATOR: createDOBinding(coordinator),
+    };
+  });
+
+  it("fails closed with 503 when COORDINATOR binding is completely missing", async () => {
+    // Missing env.COORDINATOR must NEVER fall back to in-memory state; it must fail closed
+    const envWithoutDO: Env = { ...baseEnv };
+    delete envWithoutDO.COORDINATOR;
+
+    // Price endpoint check
+    const req = new Request("http://localhost/api/v1/price/latest");
+    const res = await worker.fetch(req, envWithoutDO);
+
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as HawklyxPriceResponse;
+    expect(body.status).toBe("no_data");
+    expect(body.data).toBeNull();
+    expect(body.message).toContain("Coordination service is unavailable");
+
+    // Health endpoint check
+    const healthReq = new Request("http://localhost/health");
+    const healthRes = await worker.fetch(healthReq, envWithoutDO);
+    expect(healthRes.status).toBe(503);
+    const healthData = (await healthRes.json()) as HealthStatusResponse;
+    expect(healthData.status).toBe("exhausted");
+  });
+
+  it("fails closed with safe 503 when coordinator throws an unexpected error", async () => {
+    const brokenCoordinator = {
+      handlePriceRequest: vi.fn().mockRejectedValue(new Error("DO internal failure")),
+      getHealth: vi.fn().mockRejectedValue(new Error("DO internal health failure")),
+    };
+
+    const envBroken: Env = {
+      ...baseEnv,
+      COORDINATOR: createDOBinding(brokenCoordinator),
+    };
+
+    const req = new Request("http://localhost/api/v1/price/latest");
+    const res = await worker.fetch(req, envBroken);
+
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as HawklyxPriceResponse;
+    expect(body.status).toBe("no_data");
+    expect(body.data).toBeNull();
+    expect(body.message).toContain("temporarily unavailable");
+  });
 
   it("handles GET /health and returns sanitized metrics", async () => {
     const req = new Request("http://localhost/health");
-    const res = await worker.fetch(req, mockEnv);
+    const res = await worker.fetch(req, envWithDO);
 
     expect(res.status).toBe(200);
     const data = (await res.json()) as HealthStatusResponse;
@@ -29,13 +101,12 @@ describe("Worker Endpoints Integration", () => {
   });
 
   it("returns no_data when upstream fails and no cached observation exists", async () => {
-    // Mock global fetch to fail
     const originalFetch = globalThis.fetch;
     globalThis.fetch = vi.fn().mockRejectedValue(new Error("Network connection failure"));
 
     try {
       const req = new Request("http://localhost/api/v1/price/latest");
-      const res = await worker.fetch(req, mockEnv);
+      const res = await worker.fetch(req, envWithDO);
 
       expect(res.status).toBe(503);
       const data = (await res.json()) as HawklyxPriceResponse;
@@ -71,7 +142,7 @@ describe("Worker Endpoints Integration", () => {
 
     try {
       const req = new Request("http://localhost/api/v1/price/latest?force=true");
-      const res = await worker.fetch(req, mockEnv);
+      const res = await worker.fetch(req, envWithDO);
 
       expect(res.status).toBe(200);
       const body = (await res.json()) as HawklyxPriceResponse;
@@ -85,13 +156,120 @@ describe("Worker Endpoints Integration", () => {
   });
 
   it("serves cached observation when requested again within cooldown or freshness window", async () => {
-    // Cached observation now exists in isolate memory
+    // 1st request: seed the DO coordinator cache
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          status: "success",
+          data: {
+            price: 81.2,
+            code: "BRENT_CRUDE_USD",
+            stale: false,
+            synthetic: false,
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      )
+    );
+
+    try {
+      await worker.fetch(new Request("http://localhost/api/v1/price/latest?force=true"), envWithDO);
+
+      // 2nd request: serve from cache without calling fetch
+      globalThis.fetch = vi.fn().mockRejectedValue(new Error("Should not be called!"));
+      const req = new Request("http://localhost/api/v1/price/latest");
+      const res = await worker.fetch(req, envWithDO);
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as HawklyxPriceResponse;
+      expect(body.status).toBe("fresh");
+      expect(body.data?.price).toBe(81.2);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("handles OPTIONS preflight with standard CORS headers", async () => {
+    const req = new Request("http://localhost/api/v1/price/latest", {
+      method: "OPTIONS",
+    });
+    const res = await worker.fetch(req, envWithDO);
+
+    expect(res.status).toBe(204);
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    expect(res.headers.get("Access-Control-Allow-Methods")).toContain("GET");
+  });
+
+  it("rejects non-GET HTTP methods with 405 Method Not Allowed", async () => {
+    const methods = ["POST", "PUT", "DELETE", "PATCH"];
+
+    for (const method of methods) {
+      const req = new Request("http://localhost/api/v1/price/latest", {
+        method,
+      });
+      const res = await worker.fetch(req, envWithDO);
+
+      expect(res.status).toBe(405);
+      expect(res.headers.get("Allow")).toBe("GET, OPTIONS");
+      const json = await res.json();
+      expect(json).toHaveProperty("error", "Method Not Allowed");
+    }
+  });
+
+  it("rejects excessively long URIs with 414 URI Too Long", async () => {
+    const longParam = "a".repeat(2100);
+    const req = new Request(`http://localhost/api/v1/price/latest?query=${longParam}`);
+    const res = await worker.fetch(req, envWithDO);
+
+    expect(res.status).toBe(414);
+    const json = await res.json();
+    expect(json).toHaveProperty("error", "URI Too Long");
+  });
+
+  it("returns 404 for unknown endpoints", async () => {
+    const req = new Request("http://localhost/api/unknown-endpoint");
+    const res = await worker.fetch(req, envWithDO);
+
+    expect(res.status).toBe(404);
+    const json = await res.json();
+    expect(json).toHaveProperty("error", "Not Found");
+  });
+
+  it("routes requests to env.COORDINATOR Durable Object when bound", async () => {
+    const mockCoordinatorStub = {
+      handlePriceRequest: vi.fn().mockResolvedValue({
+        body: {
+          status: "fresh",
+          data: {
+            code: "BRENT_CRUDE_USD",
+            price: 89.9,
+          },
+          message: "From mock DO stub",
+          next_refresh_allowed_at: new Date().toISOString(),
+          server_time: new Date().toISOString(),
+        },
+        status: 200,
+      }),
+      getHealth: vi.fn().mockResolvedValue({
+        status: "ok",
+        service: "HAWKLYX Edge Service",
+      }),
+    };
+
+    const envMockDO: Env = {
+      ...baseEnv,
+      COORDINATOR: createDOBinding(mockCoordinatorStub),
+    };
+
     const req = new Request("http://localhost/api/v1/price/latest");
-    const res = await worker.fetch(req, mockEnv);
+    const res = await worker.fetch(req, envMockDO);
 
     expect(res.status).toBe(200);
     const body = (await res.json()) as HawklyxPriceResponse;
-    expect(body.status).toBe("fresh");
-    expect(body.data?.price).toBe(81.2);
+    expect(body.data?.price).toBe(89.9);
+    expect(body.message).toBe("From mock DO stub");
+    expect(mockCoordinatorStub.handlePriceRequest).toHaveBeenCalledTimes(1);
+    expect(envMockDO.COORDINATOR?.getByName).toHaveBeenCalledWith("global");
   });
 });

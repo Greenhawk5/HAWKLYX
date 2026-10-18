@@ -7,6 +7,7 @@ export interface CacheConfig {
 
 export class CacheManager {
   private lastObservation: ValidatedObservation | null = null;
+  private lastKnownGood: ValidatedObservation | null = null;
   private lastSuccessfulFetchMs: number | null = null;
   private lastUpstreamAttemptMs: number = 0;
   private inFlightPromise: Promise<ValidatedObservation> | null = null;
@@ -20,6 +21,14 @@ export class CacheManager {
   }
 
   public getObservation(): ValidatedObservation | null {
+    return this.lastKnownGood || this.lastObservation;
+  }
+
+  public getLastKnownGood(): ValidatedObservation | null {
+    return this.lastKnownGood;
+  }
+
+  public getRawLatestObservation(): ValidatedObservation | null {
     return this.lastObservation;
   }
 
@@ -33,14 +42,14 @@ export class CacheManager {
   }
 
   /**
-   * Returns true if cached observation exists and is within the freshness window,
-   * and is not marked stale/synthetic upstream.
+   * Returns true if a known-good observation exists within the freshness window,
+   * and is not marked stale/synthetic.
    */
   public isFresh(nowMs: number = Date.now()): boolean {
-    if (!this.lastObservation || !this.lastSuccessfulFetchMs) {
+    if (!this.lastKnownGood || !this.lastSuccessfulFetchMs) {
       return false;
     }
-    if (this.lastObservation.is_stale || this.lastObservation.is_synthetic) {
+    if (this.lastKnownGood.is_stale || this.lastKnownGood.is_synthetic) {
       return false;
     }
     const age = nowMs - this.lastSuccessfulFetchMs;
@@ -48,14 +57,14 @@ export class CacheManager {
   }
 
   /**
-   * Checks whether a forced manual refresh is currently cooling down.
+   * Checks whether a manual refresh or recent upstream attempt is currently cooling down.
    */
   public isInCooldown(nowMs: number = Date.now()): boolean {
     return nowMs - this.lastUpstreamAttemptMs < this.cooldownIntervalMs;
   }
 
   /**
-   * Computes the ISO-8601 timestamp after which the next forced refresh is permitted.
+   * Computes the ISO-8601 timestamp after which the next refresh is permitted.
    */
   public getNextRefreshAllowedIso(nowMs: number = Date.now()): string {
     const nextAllowedMs = Math.max(nowMs, this.lastUpstreamAttemptMs + this.cooldownIntervalMs);
@@ -63,12 +72,42 @@ export class CacheManager {
   }
 
   /**
-   * Atomically stores a validated observation.
+   * Stores an observation safely:
+   * Stale or synthetic observations do NOT overwrite the last known-good valid observation.
    */
   public storeObservation(obs: ValidatedObservation, nowMs: number = Date.now()): void {
     this.lastObservation = obs;
-    this.lastSuccessfulFetchMs = nowMs;
     this.lastUpstreamAttemptMs = nowMs;
+    if (!obs.is_stale && !obs.is_synthetic) {
+      this.lastKnownGood = obs;
+      this.lastSuccessfulFetchMs = nowMs;
+    }
+  }
+
+  public hydrate(state: {
+    lastObservation?: ValidatedObservation | null;
+    lastKnownGood?: ValidatedObservation | null;
+    lastSuccessfulFetchMs?: number | null;
+    lastUpstreamAttemptMs?: number;
+  }): void {
+    if (state.lastObservation !== undefined) this.lastObservation = state.lastObservation;
+    if (state.lastKnownGood !== undefined) this.lastKnownGood = state.lastKnownGood;
+    if (state.lastSuccessfulFetchMs !== undefined) this.lastSuccessfulFetchMs = state.lastSuccessfulFetchMs;
+    if (state.lastUpstreamAttemptMs !== undefined) this.lastUpstreamAttemptMs = state.lastUpstreamAttemptMs;
+  }
+
+  public dump(): {
+    lastObservation: ValidatedObservation | null;
+    lastKnownGood: ValidatedObservation | null;
+    lastSuccessfulFetchMs: number | null;
+    lastUpstreamAttemptMs: number;
+  } {
+    return {
+      lastObservation: this.lastObservation,
+      lastKnownGood: this.lastKnownGood,
+      lastSuccessfulFetchMs: this.lastSuccessfulFetchMs,
+      lastUpstreamAttemptMs: this.lastUpstreamAttemptMs,
+    };
   }
 
   /**

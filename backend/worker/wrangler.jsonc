@@ -4,6 +4,20 @@
   "main": "src/index.ts",
   "compatibility_date": "2024-10-01",
   "compatibility_flags": ["nodejs_compat"],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "COORDINATOR",
+        "class_name": "HawklyxCoordinator"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["HawklyxCoordinator"]
+    }
+  ],
   "vars": {
     "DEFAULT_UPSTREAM_INTERVAL_MINUTES": "15",
     "MANUAL_REFRESH_COOLDOWN_SECONDS": "180",

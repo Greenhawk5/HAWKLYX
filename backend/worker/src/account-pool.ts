@@ -237,4 +237,46 @@ export class AccountPoolManager {
       };
     });
   }
+
+  public hydrate(
+    persistedAccounts: Array<{
+      slot: number;
+      usedToday: number;
+      lastUsedAt: number | null;
+      quarantinedUntil: number | null;
+      quarantineReason?: QuarantineReason;
+    }>,
+    lastResetDay?: string
+  ): void {
+    if (lastResetDay) {
+      this.lastResetDay = lastResetDay;
+    }
+    for (const p of persistedAccounts) {
+      const acc = this.accounts.find((a) => a.slot === p.slot);
+      if (acc) {
+        acc.usedToday = p.usedToday;
+        acc.lastUsedAt = p.lastUsedAt;
+        acc.quarantinedUntil = p.quarantinedUntil;
+        acc.quarantineReason = p.quarantineReason;
+      }
+    }
+  }
+
+  public dump(): {
+    accounts: AccountState[];
+    lastResetDay: string;
+  } {
+    return {
+      accounts: this.accounts.map((a) => ({ ...a })),
+      lastResetDay: this.lastResetDay,
+    };
+  }
+
+  public getLastResetDay(): string {
+    return this.lastResetDay;
+  }
+
+  public setLastResetDay(day: string): void {
+    this.lastResetDay = day;
+  }
 }

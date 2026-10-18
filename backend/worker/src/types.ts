@@ -3,6 +3,14 @@
  * Defines both the upstream OilPriceAPI schema and the downstream HAWKLYX client contract.
  */
 
+export interface CoordinatorClient {
+  handlePriceRequest(options?: { force?: boolean }): Promise<{
+    body: HawklyxPriceResponse;
+    status: number;
+  }>;
+  getHealth(): Promise<HealthStatusResponse>;
+}
+
 export interface Env {
   // Secret slots for multi-account pool (1-5)
   OILPRICEAPI_KEY_1?: string;
@@ -10,6 +18,9 @@ export interface Env {
   OILPRICEAPI_KEY_3?: string;
   OILPRICEAPI_KEY_4?: string;
   OILPRICEAPI_KEY_5?: string;
+
+  // Cloudflare Durable Object for atomic multi-isolate coordination
+  COORDINATOR?: DurableObjectNamespace;
 
   // Configurable operational policies
   DEFAULT_UPSTREAM_INTERVAL_MINUTES?: string;

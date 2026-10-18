@@ -73,4 +73,53 @@ describe("CacheManager", () => {
     expect(res2.price).toBe(80.5);
     expect(res3.price).toBe(80.5);
   });
+
+  it("preserves lastKnownGood when subsequent observation is stale or synthetic", () => {
+    const cache = new CacheManager({ freshnessIntervalMinutes: 15 });
+    const now = 1000000;
+
+    // First store valid fresh observation
+    cache.storeObservation(dummyObs, now);
+    expect(cache.getLastKnownGood()?.price).toBe(80.5);
+    expect(cache.isFresh(now)).toBe(true);
+
+    // Now store a stale observation with different price
+    const staleObs: ValidatedObservation = {
+      ...dummyObs,
+      price: 65.0,
+      is_stale: true,
+    };
+    cache.storeObservation(staleObs, now + 1000);
+
+    // lastKnownGood must still be 80.5!
+    expect(cache.getLastKnownGood()?.price).toBe(80.5);
+    expect(cache.getObservation()?.price).toBe(80.5);
+    expect(cache.getRawLatestObservation()?.price).toBe(65.0);
+
+    // Store a synthetic observation
+    const syntheticObs: ValidatedObservation = {
+      ...dummyObs,
+      price: 50.0,
+      is_synthetic: true,
+    };
+    cache.storeObservation(syntheticObs, now + 2000);
+
+    // lastKnownGood must still remain 80.5
+    expect(cache.getLastKnownGood()?.price).toBe(80.5);
+  });
+
+  it("supports hydration and dumping of cached state", () => {
+    const cache1 = new CacheManager();
+    cache1.storeObservation(dummyObs, 5000);
+
+    const dumped = cache1.dump();
+    expect(dumped.lastKnownGood?.price).toBe(80.5);
+    expect(dumped.lastSuccessfulFetchMs).toBe(5000);
+
+    const cache2 = new CacheManager();
+    cache2.hydrate(dumped);
+    expect(cache2.getLastKnownGood()?.price).toBe(80.5);
+    expect(cache2.getLastSuccessfulFetchMs()).toBe(5000);
+  });
 });
+
