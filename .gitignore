@@ -1,0 +1,74 @@
+
+# Android Studio and IntelliJ
+*.iml
+.idea/
+.gradle/
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Build outputs
+build/
+**/build/
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# Local secrets and environment configuration
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+secrets/
+keys.txt
+**/keys.txt
+*.keystore
+*.jks
+
+# Cloudflare / Wrangler
+**/.wrangler/
+**/node_modules/
+backend/worker/dist/
+
+# Kotlin / Gradle
+.kotlin/
+
+# Operating system
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
+
+# Local notes and sensitive files
+/note/
+**/keys.txt
+
+# Local secrets
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+secrets/
+
+# Android signing credentials
+*.jks
+*.keystore
+
+# Local development files
+local.properties
+.gradle/
+.kotlin/
+.idea/
+**/build/
+**/node_modules/
+**/.wrangler/

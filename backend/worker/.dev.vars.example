@@ -1,0 +1,13 @@
+# HAWKLYX Backend Worker - Development Environment Variables Example
+# Copy this file to .dev.vars for local testing with `wrangler dev`
+# Real secrets must NEVER be committed to version control.
+# In production, set secrets using:
+#   npx wrangler secret put OILPRICEAPI_KEY_1
+#   npx wrangler secret put OILPRICEAPI_KEY_2
+#   ... up to OILPRICEAPI_KEY_5
+
+OILPRICEAPI_KEY_1="your_oilpriceapi_key_1_here"
+OILPRICEAPI_KEY_2=""
+OILPRICEAPI_KEY_3=""
+OILPRICEAPI_KEY_4=""
+OILPRICEAPI_KEY_5=""

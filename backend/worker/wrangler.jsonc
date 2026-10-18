@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "hawklyx-backend",
+  "main": "src/index.ts",
+  "compatibility_date": "2024-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "DEFAULT_UPSTREAM_INTERVAL_MINUTES": "15",
+    "MANUAL_REFRESH_COOLDOWN_SECONDS": "180",
+    "MAX_DAILY_QUOTA_PER_ACCOUNT": "50",
+    "GLOBAL_DAILY_BUDGET": "200",
+    "PRICE_SANITY_MIN": "10",
+    "PRICE_SANITY_MAX": "250"
+  }
+}
