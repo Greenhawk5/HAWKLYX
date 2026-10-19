@@ -60,11 +60,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up JDK 21
+      - name: Set up JDK 25
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '21'
+          java-version: '25'
+
+      - name: Ensure Android SDK directory permissions
+        run: |
+          SDK_DIR="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          if [ -d "$SDK_DIR" ]; then
+            sudo chown -R $USER:$USER "$SDK_DIR"
+          fi
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
@@ -74,42 +81,41 @@ jobs:
       - name: Accept Android SDK licenses
         run: yes | sdkmanager --licenses
 
-      - name: Install Android SDK Build Tools
-        run: sdkmanager "build-tools;36.0.0"
-
-      - name: Install Android SDK Platform 37
+      - name: Install Android SDK Platform and Build Tools
         run: |
-          if ! sdkmanager "platforms;android-37.0"; then
-            echo "Direct installation of platforms;android-37.0 failed; attempting platforms;android-37..."
-            sdkmanager "platforms;android-37"
-          fi
-          if [ -d "$ANDROID_HOME/platforms/android-37.0" ] && [ ! -d "$ANDROID_HOME/platforms/android-37" ]; then
-            ln -s "$ANDROID_HOME/platforms/android-37.0" "$ANDROID_HOME/platforms/android-37"
-          fi
+          yes | sdkmanager "build-tools;36.0.0" "platforms;android-37.0" --sdk_root="$ANDROID_HOME"
 
-      - name: Verify Android SDK Platform and Build Tools
+      - name: Verify Android SDK and Java Environment
         run: |
+          echo "Verifying Java runtime..."
+          java -version
+
           echo "Verifying Android SDK installation in $ANDROID_HOME..."
+
+          if [ -z "$ANDROID_HOME" ] || [ ! -d "$ANDROID_HOME" ]; then
+            echo "::error::ANDROID_HOME is not set or directory does not exist: '$ANDROID_HOME'"
+            exit 1
+          fi
 
           # Verify required build tools (resolved by AGP 9.4.1)
           if [ ! -d "$ANDROID_HOME/build-tools/36.0.0" ]; then
             echo "::error::Required Android SDK Build Tools 36.0.0 not found in $ANDROID_HOME/build-tools."
-            echo "Available build tools:"
+            echo "Available build tools in $ANDROID_HOME/build-tools:"
             ls -la "$ANDROID_HOME/build-tools" || true
             exit 1
           fi
           echo "Verified: Android SDK Build Tools 36.0.0 is present."
 
           # Verify required platform 37
-          if [ ! -d "$ANDROID_HOME/platforms/android-37" ] && [ ! -d "$ANDROID_HOME/platforms/android-37.0" ]; then
+          if [ ! -d "$ANDROID_HOME/platforms/android-37.0" ] && [ ! -d "$ANDROID_HOME/platforms/android-37" ]; then
             echo "::error::Required Android SDK Platform 37 not found in $ANDROID_HOME/platforms."
-            echo "Available platforms:"
+            echo "Available platforms in $ANDROID_HOME/platforms:"
             ls -la "$ANDROID_HOME/platforms" || true
             exit 1
           fi
           echo "Verified: Android SDK Platform 37 is present."
 
-          echo "Android SDK environment successfully verified."
+          echo "Android SDK and Java environment successfully verified."
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
