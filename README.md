@@ -1,264 +1,143 @@
-::: {align="center"}
+<div align="center">
+
+![HAWKLYX — Brent Crude Monitor Banner](doc/banner.png)
+
 # HAWKLYX
 
 ### Brent Crude Monitor · Android Widgets · Cloudflare Edge
 
-**A focused, privacy-conscious way to follow Brent crude oil prices ---
-right from your Android home screen.**
+**Follow Brent crude oil prices from your Android home screen.**
 
-```{=html}
-<p>
-```
-`<a href="https://github.com/Greenhawk5/HAWKLYX">`{=html}Repository`</a>`{=html}
-· `<a href="#-features">`{=html}Features`</a>`{=html} ·
-`<a href="#-screenshots">`{=html}Screenshots`</a>`{=html} ·
-`<a href="#-getting-started">`{=html}Getting started`</a>`{=html} ·
-`<a href="#-security--privacy">`{=html}Security`</a>`{=html}
-```{=html}
-</p>
-```
-```{=html}
-<p>
-```
-`<a href="https://github.com/Greenhawk5/HAWKLYX/actions/workflows/ci.yml">`{=html}`<img src="https://github.com/Greenhawk5/HAWKLYX/actions/workflows/ci.yml/badge.svg" alt="CI status" />`{=html}`</a>`{=html}
-`<img src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android 8.0+" />`{=html}
-`<img src="https://img.shields.io/badge/Kotlin-2.2.10-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white" alt="Kotlin" />`{=html}
-`<img src="https://img.shields.io/badge/Jetpack_Compose-UI-4285F4?style=for-the-badge&logo=jetpackcompose&logoColor=white" alt="Jetpack Compose" />`{=html}
-`<img src="https://img.shields.io/badge/Cloudflare-Workers%20%2B%20Durable%20Objects-F38020?style=for-the-badge&logo=cloudflare&logoColor=white" alt="Cloudflare" />`{=html}
-`<a href="LICENSE">`{=html}`<img src="https://img.shields.io/badge/License-MIT-F5C542?style=for-the-badge" alt="MIT License" />`{=html}`</a>`{=html}
-```{=html}
-</p>
-```
-```{=html}
-<p>
-```
-`<img src="https://img.shields.io/badge/Instrument-BRENT_CRUDE_USD-1B3025?style=flat-square" alt="Brent crude" />`{=html}
-`<img src="https://img.shields.io/badge/Architecture-Edge--coordinated-263B32?style=flat-square" alt="Edge-coordinated architecture" />`{=html}
-`<img src="https://img.shields.io/badge/Secrets-Server--side_only-263B32?style=flat-square" alt="Server-side secrets" />`{=html}
-```{=html}
-</p>
-```
-:::
+[Repository](https://github.com/Greenhawk5/HAWKLYX) ·
+[Features](#-features) ·
+[Screenshots](#-screenshots) ·
+[Getting Started](#-getting-started) ·
+[Security](#-security--privacy)
 
-------------------------------------------------------------------------
+[![CI](https://github.com/Greenhawk5/HAWKLYX/actions/workflows/ci.yml/badge.svg)](https://github.com/Greenhawk5/HAWKLYX/actions/workflows/ci.yml)
+![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=for-the-badge&logo=android&logoColor=white)
+![Kotlin](https://img.shields.io/badge/Kotlin-Android-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white)
+![Jetpack Compose](https://img.shields.io/badge/Jetpack_Compose-UI-4285F4?style=for-the-badge&logo=jetpackcompose&logoColor=white)
+![Cloudflare](https://img.shields.io/badge/Cloudflare-Workers%20%2B%20Durable%20Objects-F38020?style=for-the-badge&logo=cloudflare&logoColor=white)
+[![License: MIT](https://img.shields.io/badge/License-MIT-F5C542?style=for-the-badge)](LICENSE)
+
+![Instrument](https://img.shields.io/badge/Instrument-BRENT_CRUDE_USD-1B3025?style=flat-square)
+![Architecture](https://img.shields.io/badge/Architecture-Edge--coordinated-263B32?style=flat-square)
+![Secrets](https://img.shields.io/badge/Secrets-Server--side_only-263B32?style=flat-square)
+![Visits](https://badges.pufler.dev/visits/Greenhawk5/HAWKLYX)
+
+</div>
+
+---
 
 ## ✦ About
 
-**HAWKLYX** is an Android application for monitoring Brent crude oil
-prices (`BRENT_CRUDE_USD`). It combines a premium dark market interface,
-two Android home-screen widgets, interactive historical charts, and a
-Cloudflare Worker backend that coordinates upstream requests and
-preserves the last verified quote when the provider is unavailable.
+**HAWKLYX** is an Android application for monitoring Brent crude oil prices (`BRENT_CRUDE_USD`). It combines a dark market interface, two Android home-screen widgets, interactive historical charts, and a Cloudflare Worker backend that coordinates upstream requests and preserves the last verified quote when the provider is unavailable.
 
-The guiding principle is simple: **market data should be easy to glance
-at, honest about its freshness, and resilient when connectivity or
-upstream services fail.**
+The guiding principle is simple: **market data should be easy to glance at, honest about its freshness, and resilient when connectivity or upstream services fail.**
 
-> A clear market snapshot at a glance. Deeper historical context when
-> you need it.
+> A clear market snapshot at a glance. Deeper historical context when you need it.
 
 ## ✦ At a glance
 
-  ----------------------------------- -----------------------------------
-  **Instrument**                      Brent crude oil, USD per barrel
-
-  **Android app**                     Kotlin, Jetpack Compose, Android
-                                      home-screen widgets
-
-  **Minimum Android version**         Android 8.0 (API 26)
-
-  **Backend**                         Cloudflare Workers + SQLite-backed
-                                      Durable Objects
-
-  **Upstream data**                   OilPriceAPI
-
-  **History**                         Verified hourly observations and
-                                      daily rollups
-
-  **License**                         MIT --- see [`LICENSE`](LICENSE)
-
-  **Release status**                  Preparing the first stable
-                                      `v1.0.0`; check GitHub Releases for
-                                      published builds
-  ----------------------------------- -----------------------------------
+| | |
+|---|---|
+| **Instrument** | Brent crude oil, quoted in USD per barrel |
+| **Android app** | Kotlin, Jetpack Compose, Android home-screen widgets |
+| **Minimum Android version** | Android 8.0 (API 26) |
+| **Backend** | Cloudflare Workers + SQLite-backed Durable Objects |
+| **Upstream data provider** | OilPriceAPI |
+| **Historical data** | Verified hourly observations and daily rollups |
+| **License** | MIT — see [`LICENSE`](LICENSE) |
+| **Release status** | Preparing the first stable `v1.0.0`; see [GitHub Releases](https://github.com/Greenhawk5/HAWKLYX/releases) for published builds |
 
 ## ✦ Features
 
-```{=html}
-<table>
-```
-```{=html}
-<tr>
-```
-```{=html}
-<td width="50%" valign="top">
-```
-### 📊 Market Snapshot widget
+| **📊 Market Snapshot widget** | **📈 Market Intelligence widget** |
+|:---|:---|
+| Compact home-screen quote card. | Larger quote-and-chart layout. |
+| Prominent Brent price and `USD / barrel` denomination. | Mini-chart rendered from available observations. |
+| Market status and data freshness. | Price-change metrics and market context. |
+| Observation timestamp and dedicated refresh control. | Historical chart and manual refresh action. |
+| Tap to open the app. | Uses recorded observations only — no generated chart points. |
 
--   Compact home-screen quote card.
-
--   Prominent Brent price and `USD / barrel` denomination.
-
--   Market and freshness status.
-
--   Observation timestamp.
-
--   Dedicated manual refresh control.
-
--   One-tap launch to the app.
-
-    ```{=html}
-    </td>
-    ```
-    ```{=html}
-    <td width="50%" valign="top">
-    ```
-
-### 📈 Market Intelligence widget
-
--   Larger quote-and-chart layout.
-
--   Mini-chart rendered from available observations.
-
--   Price-change metrics.
-
--   Market state and freshness context.
-
--   Manual refresh action.
-
--   Authentic data only --- no generated chart points.
-
-    ```{=html}
-    </td>
-    ```
-    ```{=html}
-    </tr>
-    ```
-    ```{=html}
-    <tr>
-    ```
-    ```{=html}
-    <td width="50%" valign="top">
-    ```
-
-### 🧭 Interactive market history
-
--   `1D`, `1W`, `1M`, `6M`, and `1Y` ranges.
-
--   Touch inspection for individual observations.
-
--   Range-specific summaries and high/low context.
-
--   Hourly observations and daily rollups for longer ranges.
-
--   Partial-history indicators when a range is not fully populated.
-
-    ```{=html}
-    </td>
-    ```
-    ```{=html}
-    <td width="50%" valign="top">
-    ```
-
-### 🎨 Market-aware visual language
-
--   Emerald for positive movement.
-
--   Ruby/red for negative movement.
-
--   Amber for a closed or paused market.
-
--   Explicit freshness and error states.
-
--   Consistent visual semantics across the app and widgets.
-
-    ```{=html}
-    </td>
-    ```
-    ```{=html}
-    </tr>
-    ```
-    ```{=html}
-    </table>
-    ```
+| **🧭 Interactive market history** | **🎨 Market-aware visual language** |
+|:---|:---|
+| Select `1D`, `1W`, `1M`, `6M`, or `1Y` ranges. | Emerald for positive movement. |
+| Inspect individual observations. | Ruby/red for negative movement. |
+| Review range summaries and high/low context. | Amber for a closed or paused market. |
+| Hourly observations and daily rollups for longer ranges. | Explicit freshness and error states. |
+| Partial-history indicators when a range is not fully populated. | Consistent colors across the app and widgets. |
 
 ### Reliability by design
 
--   **No upstream API keys in the Android client.** Provider credentials
-    stay on the Worker.
--   **Coordinated upstream requests.** A Durable Object centralizes
-    shared limits and prevents duplicate concurrent fetches.
--   **Request coalescing.** Concurrent refreshes can share one in-flight
-    provider request.
--   **Last-known-good preservation.** Provider failures do not replace a
-    valid quote with a fabricated value or zero.
--   **Sanity checks.** Implausible quotes are rejected.
--   **Controlled refreshes.** Shared request budgets and cooldowns help
-    protect upstream allowances.
--   **Background collection.** Scheduled Worker execution can collect
-    observations independently of the Android app.
+- **Server-side provider credentials:** upstream API keys do not belong in the Android client.
+- **Coordinated upstream requests:** a Durable Object centralizes shared limits and helps prevent duplicate concurrent fetches.
+- **Request coalescing:** concurrent refreshes can share an in-flight provider request.
+- **Last-known-good preservation:** provider failures do not replace a valid quote with a fabricated value or zero.
+- **Sanity checks:** implausible quotes can be rejected instead of blindly displayed.
+- **Controlled refreshes:** shared request budgets and cooldowns help protect upstream allowances.
+- **Background collection:** scheduled Worker execution can collect observations independently of the Android app.
 
-------------------------------------------------------------------------
+---
 
 ## ✦ Screenshots
 
-The gallery is reserved for screenshots from the running app and
-widgets. Add real captures under `docs/screenshots/`, then uncomment and
-update the image paths below. This keeps the README honest: mockups are
-not presented as product screenshots.
+Explore the HAWKLYX product experience across its Android home-screen widgets, the main market overview, interactive historical charts, and architectural transparency screens.
 
-```{=html}
-<!--
-<table>
-  <tr>
-    <td width="50%" align="center">
-      <img src="docs/screenshots/home-market.png" alt="HAWKLYX home screen showing the current Brent quote" width="100%" />
-      <br /><sub><b>Market overview</b> · Quote and market status</sub>
-    </td>
-    <td width="50%" align="center">
-      <img src="docs/screenshots/market-history-1d.png" alt="HAWKLYX one-day market history chart" width="100%" />
-      <br /><sub><b>Market history</b> · Inspect verified observations</sub>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" align="center">
-      <img src="docs/screenshots/widget-snapshot.png" alt="HAWKLYX Market Snapshot Android widget" width="100%" />
-      <br /><sub><b>Market Snapshot</b> · A quick glance from the home screen</sub>
-    </td>
-    <td width="50%" align="center">
-      <img src="docs/screenshots/widget-intelligence.png" alt="HAWKLYX Market Intelligence widget with chart" width="100%" />
-      <br /><sub><b>Market Intelligence</b> · Quote and chart together</sub>
-    </td>
-  </tr>
-</table>
--->
-```
-**Suggested gallery:** Home screen · 1D history · Market Snapshot widget
-· Market Intelligence widget.
+### Android Home-Screen Widgets
 
-------------------------------------------------------------------------
+Glanceable, low-overhead widgets engineered to deliver live Brent crude quotes and analytical trends directly to your Android launcher.
 
-## ✦ How it works
+| Market Snapshot Widget (3×2) | Market Intelligence Widget (4×3) |
+|:---:|:---:|
+| ![HAWKLYX Market Snapshot Widget (3x2)](doc/screenshots/widget1.png) | ![HAWKLYX Market Intelligence Widget (4x3)](doc/screenshots/widget2.png) |
+| **Instant Glanceable Spot Quote**<br>High-contrast Brent price numeral ($108.23), live freshness status badge (`LIVE`), 24-hour delta pill (`-1.56%`), source observation timestamp, and direct manual refresh trigger. | **Historical Mini-Chart & Trends**<br>Real-time sparkline trajectory, high/low range boundaries ($109.95 / $107.03), 7-day movement metrics (`-1.37%`), and active trading session context. |
 
-``` text
+---
+
+### Home Screen — Market Overview & History
+
+The primary application interface provides immediate market awareness, background sync countdowns, interactive chart scrubbing, and contract specifications.
+
+| Live Spot & Edge Cadence | Interactive History & Specifications |
+|:---:|:---:|
+| ![HAWKLYX Home Screen — Spot Price and Scheduled Edge Cadence](doc/screenshots/home1.jpg) | ![HAWKLYX Home Screen — Interactive Market History and Specifications](doc/screenshots/home2.jpg) |
+| **Live Spot & Edge Cadence**<br>Hero price card with real-time status, source observation timestamp (17:16:00), last edge sync time (17:30:54), manual refresh button, and next sync countdown timer. | **Interactive Charting & Specs**<br>Touch inspection with vertical crosshair, multi-timeframe range selection (`1D`, `1W`, `1M`, `6M`, `1Y`), high/low markers, and commodity contract specifications. |
+
+---
+
+### About Screen — Transparency & Architecture
+
+Full architectural disclosure, refresh cadence policies, developer attribution, and build specifications.
+
+| Brand Identity & Philosophy | Refresh Policies & Specifications | Developer Links & System Specs |
+|:---:|:---:|:---:|
+| ![HAWKLYX About — Purpose and Philosophy](doc/screenshots/about1.jpg) | ![HAWKLYX About — Refresh Cadence and Market Specifications](doc/screenshots/about2.jpg) | ![HAWKLYX About — Developer Links and System Specifications](doc/screenshots/about3.jpg) |
+| **Purpose & Philosophy**<br>Falcon brand mark and minimal precision design principles prioritizing the widget interface. | **Policies & Specifications**<br>Background schedules (15m), cooldown limits (3m), offline fallback, and Durable Object coordination. | **System & Developer Specs**<br>Creator portfolio, GitHub repository, versioning (`1.0 Build 1`), and Android SDK targets (API 26–37). |
+
+---
+
+## ✦ Architecture
+
+```text
 ┌──────────────────────┐
 │      OilPriceAPI     │
 │   Upstream quote     │
 └──────────┬───────────┘
-           │ Server-side authenticated request
+           │ Authenticated server-side request
            ▼
 ┌──────────────────────────────────────────┐
 │       HAWKLYX Cloudflare Worker           │
 │                                          │
 │  ┌────────────────────────────────────┐  │
-│  │ HawklyxCoordinator                 │  │
-│  │ Durable Object + SQLite storage    │  │
+│  │ Coordinator Durable Object          │  │
+│  │ SQLite-backed state                 │  │
 │  └────────────────────────────────────┘  │
-│    • Shared request budget               │
-│    • Account allowance rotation          │
-│    • Cooldown and request coalescing     │
-│    • Quote validation and cache          │
-│    • Hourly observations / daily rollups │
+│  • Shared request budget                 │
+│  • Cooldown and request coalescing       │
+│  • Quote validation and cache            │
+│  • Hourly observations / daily rollups   │
 └───────────────────┬──────────────────────┘
                     │ JSON API
                     ▼
@@ -273,70 +152,43 @@ not presented as product screenshots.
 
 ### Data flow
 
-1.  The Worker requests a quote when cache state, market status, and
-    request policy allow it.
-2.  The coordinator validates the result and preserves the last known
-    valid quote if an upstream request fails.
-3.  Valid observations are recorded for historical charting; chart reads
-    do not need to trigger extra upstream quote requests.
-4.  The Android repository exposes data to the app and widgets, while
-    local persistence can retain the last known quote for offline
-    display.
-5.  The UI communicates price movement and data freshness so cached data
-    is not mistaken for a newly observed quote.
+1. The Worker requests a quote when cache state, market status, and request policy allow it.
+2. The coordinator validates the result and preserves the last known valid quote if an upstream request fails.
+3. Valid observations are recorded for historical charting; chart reads do not need to trigger extra upstream quote requests.
+4. The Android repository exposes data to the app and widgets, while local persistence can retain the last known quote for offline display.
+5. The UI communicates price movement and data freshness so cached data is not mistaken for a newly observed quote.
 
 ### Backend API
 
-  -----------------------------------------------------------------------
-  Endpoint                            Purpose
-  ----------------------------------- -----------------------------------
-  `GET /api/v1/price/latest`          Latest available quote and
-                                      freshness metadata
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/v1/price/latest` | Latest available quote and freshness metadata |
+| `GET /api/v1/price/history` | Historical observations for supported ranges |
+| `GET /health` | Sanitized operational health information |
 
-  `GET /api/v1/price/history`         Historical observations for
-                                      supported ranges
-
-  `GET /health`                       Sanitized operational health
-                                      information
-  -----------------------------------------------------------------------
-
-------------------------------------------------------------------------
+---
 
 ## ✦ Technology stack
 
-```{=html}
-<p>
-```
-`<img src="https://img.shields.io/badge/Kotlin-2.2.10-7F52FF?style=flat-square&logo=kotlin&logoColor=white" alt="Kotlin" />`{=html}
-`<img src="https://img.shields.io/badge/Jetpack_Compose-UI-4285F4?style=flat-square&logo=jetpackcompose&logoColor=white" alt="Jetpack Compose" />`{=html}
-`<img src="https://img.shields.io/badge/Android_Widgets-RemoteViews-3DDC84?style=flat-square&logo=android&logoColor=white" alt="Android widgets" />`{=html}
-`<img src="https://img.shields.io/badge/Cloudflare_Workers-F38020?style=flat-square&logo=cloudflare&logoColor=white" alt="Cloudflare Workers" />`{=html}
-`<img src="https://img.shields.io/badge/Durable_Objects-SQLite-F38020?style=flat-square&logo=cloudflare&logoColor=white" alt="Durable Objects and SQLite" />`{=html}
-`<img src="https://img.shields.io/badge/TypeScript-5.7%2B-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" />`{=html}
-`<img src="https://img.shields.io/badge/Gradle-9.6-02303A?style=flat-square&logo=gradle&logoColor=white" alt="Gradle" />`{=html}
-`<img src="https://img.shields.io/badge/Vitest-Tests-6E9F18?style=flat-square&logo=vitest&logoColor=white" alt="Vitest" />`{=html}
-```{=html}
-</p>
-```
-  Area                           Technology
-  ------------------------------ -----------------------------------------
-  Android UI                     Jetpack Compose + Material 3
-  Android widgets                AppWidgetProvider + RemoteViews
-  Language                       Kotlin
-  Background sync                Android WorkManager
-  Local state                    Preferences-backed last-known-good data
-  Backend runtime                Cloudflare Workers
-  Coordination and persistence   Durable Objects with SQLite storage
-  Backend language               TypeScript
-  Backend tests                  Vitest
-  Android tests                  JUnit
-  Build                          Gradle Wrapper
+| **Area** | **Technology** |
+|:---|:---|
+| Android UI | ![Jetpack Compose](https://img.shields.io/badge/Jetpack_Compose-4285F4?style=flat-square&logo=jetpackcompose&logoColor=white) ![Material 3](https://img.shields.io/badge/Material_3-6750A4?style=flat-square&logo=materialdesign&logoColor=white) |
+| Android widgets | ![AppWidgetProvider](https://img.shields.io/badge/AppWidgetProvider-3DDC84?style=flat-square&logo=android&logoColor=white) ![RemoteViews](https://img.shields.io/badge/RemoteViews-3DDC84?style=flat-square&logo=android&logoColor=white) |
+| Android language | ![Kotlin](https://img.shields.io/badge/Kotlin-7F52FF?style=flat-square&logo=kotlin&logoColor=white) |
+| Background sync | ![WorkManager](https://img.shields.io/badge/WorkManager-3DDC84?style=flat-square&logo=android&logoColor=white) |
+| Local state | ![Preferences](https://img.shields.io/badge/Preferences-59666C?style=flat-square&logo=android&logoColor=white) |
+| Backend runtime | ![Cloudflare Workers](https://img.shields.io/badge/Cloudflare_Workers-F38020?style=flat-square&logo=cloudflare&logoColor=white) |
+| Coordination & persistence | ![Durable Objects](https://img.shields.io/badge/Durable_Objects-F38020?style=flat-square&logo=cloudflare&logoColor=white) ![SQLite](https://img.shields.io/badge/SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white) |
+| Backend language | ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white) |
+| Backend tests | ![Vitest](https://img.shields.io/badge/Vitest-6E9F18?style=flat-square&logo=vitest&logoColor=white) |
+| Android tests | ![JUnit](https://img.shields.io/badge/JUnit-25A162?style=flat-square&logo=junit5&logoColor=white) |
+| Build system | ![Gradle](https://img.shields.io/badge/Gradle-02303A?style=flat-square&logo=gradle&logoColor=white) |
 
-------------------------------------------------------------------------
+---
 
 ## ✦ Repository structure
 
-``` text
+```text
 HAWKLYX/
 ├── .github/
 │   ├── ISSUE_TEMPLATE/           # Bug reports and feature requests
@@ -359,11 +211,12 @@ HAWKLYX/
 │   └── worker/
 │       ├── src/                   # Worker, coordinator and provider logic
 │       ├── test/                  # Backend tests
-│       ├── wrangler.jsonc         # Worker configuration and bindings
+│       ├── wrangler.jsonc         # Worker configuration, if present
 │       └── package.json
 ├── gradle/                        # Wrapper and version catalog
-├── docs/
-│   └── screenshots/               # Optional real product screenshots
+├── doc/
+│   ├── banner.png                 # Repository header banner
+│   └── screenshots/               # Real product & widget screenshots
 ├── CHANGELOG.md
 ├── CITATION.cff
 ├── CONTRIBUTING.md
@@ -375,22 +228,21 @@ HAWKLYX/
 └── README.md
 ```
 
-------------------------------------------------------------------------
+---
 
 ## ✦ Getting started
 
 ### Requirements
 
--   Android Studio with a compatible Android SDK.
--   Android SDK Platform 37, as configured by the current project.
--   A supported JDK; Android Studio's bundled JBR is recommended.
--   Node.js 20+ and npm for backend development.
--   A Cloudflare account and correctly configured Worker bindings for
-    backend development.
+- Android Studio with a compatible Android SDK.
+- Android SDK Platform 37, as configured by the current project.
+- A supported JDK; Android Studio's bundled JBR is recommended.
+- Node.js and npm for backend development.
+- A Cloudflare account and correctly configured Worker bindings for backend development.
 
 ### 1. Clone the repository
 
-``` bash
+```bash
 git clone https://github.com/Greenhawk5/HAWKLYX.git
 cd HAWKLYX
 ```
@@ -399,8 +251,7 @@ cd HAWKLYX
 
 On Windows PowerShell:
 
-``` powershell
-# If needed, set JAVA_HOME to Android Studio's bundled JBR first.
+```powershell
 .\gradlew.bat --no-configuration-cache test --rerun-tasks
 .\gradlew.bat --no-configuration-cache lintDebug
 .\gradlew.bat --no-configuration-cache assembleDebug
@@ -408,7 +259,7 @@ On Windows PowerShell:
 
 On macOS/Linux:
 
-``` bash
+```bash
 ./gradlew --no-configuration-cache test --rerun-tasks
 ./gradlew --no-configuration-cache lintDebug
 ./gradlew --no-configuration-cache assembleDebug
@@ -416,17 +267,15 @@ On macOS/Linux:
 
 The debug APK is generated at:
 
-``` text
+```text
 app/build/outputs/apk/debug/app-debug.apk
 ```
 
-You can also open the repository in Android Studio, wait for Gradle
-sync, select a connected Android device, and run the `app`
-configuration.
+You can also open the repository in Android Studio, wait for Gradle sync, select a connected Android device, and run the `app` configuration.
 
 ### 3. Set up the Cloudflare Worker
 
-``` bash
+```bash
 cd backend/worker
 npm ci
 npm run typecheck
@@ -435,170 +284,96 @@ npm audit
 npm run build
 ```
 
-For local development, copy `.dev.vars.example` to `.dev.vars` and add
-your own development credentials. **Never commit `.dev.vars` or real API
-keys.**
+For local development, use the environment-variable template provided by the project, if present, to create your local `.dev.vars` file. Add your own development credentials there. **Never commit `.dev.vars` or real API keys.**
 
-The configured `npm run build` performs a Wrangler dry-run build; it
-does not deploy the Worker.
+The configured `npm run build` performs a Wrangler dry-run build if that is how the package script is defined; it should not be treated as a deployment command.
 
-------------------------------------------------------------------------
+---
 
 ## ✦ Data limits and market behavior
 
-HAWKLYX is designed to operate within constrained upstream API
-allowances.
+HAWKLYX is designed to operate within constrained upstream API allowances.
 
--   **Shared daily request budget:** the coordinator enforces the
-    configured global budget.
--   **Automated collection reserve:** part of the budget is reserved for
-    scheduled market observations.
--   **Manual refresh cooldown:** repeated manual refreshes are
-    rate-limited.
--   **Cache-aware requests:** cached data can be returned without
-    contacting the provider.
--   **Historical reads:** chart history is served from stored
-    observations and rollups rather than requiring a fresh upstream
-    quote for every chart interaction.
--   **Market closure:** prices may remain unchanged while the market is
-    closed; the UI communicates market state rather than implying
-    movement.
--   **No fabricated history:** chart points represent stored
-    observations only. Longer ranges may remain partial until sufficient
-    history accumulates.
+- **Shared daily request budget:** the coordinator enforces the configured global budget.
+- **Automated collection reserve:** part of the budget is reserved for scheduled market observations.
+- **Manual refresh cooldown:** repeated manual refreshes are rate-limited.
+- **Cache-aware requests:** cached data can be returned without contacting the provider.
+- **Historical reads:** chart history is served from stored observations and rollups rather than requiring a fresh upstream quote for every chart interaction.
+- **Market closure:** prices may remain unchanged while the market is closed; the UI communicates market state rather than implying movement.
+- **No fabricated history:** chart points represent stored observations only. Longer ranges may remain partial until sufficient history accumulates.
 
-The configured backend policy is documented as a maximum of **250
-upstream requests per UTC day**, with **110 reserved for scheduled
-collection** and a **140-request ceiling for manual requests**. These
-are implementation settings, not a guarantee of provider availability;
-verify the deployed Worker configuration before relying on production
-limits.
+The current backend policy has been documented as a maximum of **250 upstream requests per UTC day**, with **110 reserved for scheduled collection** and a **140-request ceiling for manual requests**. These are implementation settings, not a guarantee of provider availability. Verify the deployed Worker configuration before relying on production limits.
 
-------------------------------------------------------------------------
+---
 
 ## ✦ Security & privacy
 
--   Provider API credentials must remain server-side and must never be
-    embedded in the Android app.
--   Local development secrets belong in ignored local configuration
-    files, not source control.
--   The health endpoint should expose only sanitized aggregate
-    operational data.
--   The app may retain the last verified quote locally to improve
-    resilience during temporary connectivity failures.
--   Market data may be delayed or cached. HAWKLYX is not a
-    trade-execution platform and does not provide financial advice.
+- Provider API credentials must remain server-side and must never be embedded in the Android app.
+- Local development secrets belong in ignored local configuration files, not source control.
+- The health endpoint should expose only sanitized aggregate operational data.
+- The app may retain the last verified quote locally to improve resilience during temporary connectivity failures.
+- Market data may be delayed or cached. HAWKLYX is not a trade-execution platform and does not provide financial advice.
 
-Please review [`SECURITY.md`](SECURITY.md) before reporting a
-vulnerability. Never open public issues containing credentials, tokens,
-or private account information.
+Please review [`SECURITY.md`](SECURITY.md) before reporting a vulnerability. Never open public issues containing credentials, tokens, or private account information.
 
-------------------------------------------------------------------------
+---
 
 ## ✦ Troubleshooting
 
-  -----------------------------------------------------------------------
-  Symptom                             What to check
-  ----------------------------------- -----------------------------------
-  The quote appears unchanged         Check market status, observation
-                                      timestamp, and freshness state. A
-                                      closed market or cached response
-                                      can legitimately preserve the same
-                                      value.
+| Symptom | What to check |
+|---|---|
+| The quote appears unchanged | Check market status, observation timestamp, and freshness state. A closed market or cached response can legitimately preserve the same value. |
+| A widget does not update immediately | Check connectivity, WorkManager/background restrictions, and the widget's freshness indicator. Android may defer background work. |
+| Manual refresh does not trigger a provider request | The shared cooldown, cache, or global budget may be active. A refresh action does not guarantee a new upstream call. |
+| The chart marks a range as partial | The backend may not yet have accumulated observations for the full selected period. |
+| Worker tests fail | Run `npm ci` from `backend/worker/` and use a Node.js version compatible with the project. |
+| Android build cannot find SDK Platform 37 | Install the configured SDK platform through Android Studio's SDK Manager, then sync Gradle again. |
 
-  A widget does not update            Check connectivity,
-  immediately                         WorkManager/background
-                                      restrictions, and the widget's
-                                      freshness indicator. Android may
-                                      defer background work.
-
-  Manual refresh does not trigger a   The shared cooldown, cache, or
-  provider request                    global budget may be active. A
-                                      refresh action does not guarantee a
-                                      new upstream call.
-
-  The chart marks a range as partial  The backend may not yet have
-                                      accumulated observations for the
-                                      full selected period.
-
-  Worker tests fail                   Use Node.js 20+ and run `npm ci`
-                                      from `backend/worker/`.
-
-  Android build cannot find SDK       Install the configured SDK platform
-  Platform 37                         through Android Studio's SDK
-                                      Manager, then sync Gradle again.
-  -----------------------------------------------------------------------
-
-------------------------------------------------------------------------
+---
 
 ## ✦ Project documentation
 
-  ------------------------------------------------------------------------------------------
-  Document                                               Description
-  ------------------------------------------------------ -----------------------------------
-  [`CHANGELOG.md`](CHANGELOG.md)                         Release notes and change history
+| Document | Description |
+|---|---|
+| [`CHANGELOG.md`](CHANGELOG.md) | Release notes and change history |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contribution workflow and development expectations |
+| [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) | Community standards |
+| [`SECURITY.md`](SECURITY.md) | Security reporting policy |
+| [`SUPPORT.md`](SUPPORT.md) | Support channels |
+| [`REPOSITORY_HARDENING.md`](REPOSITORY_HARDENING.md) | Security architecture and repository hardening |
+| [`CITATION.cff`](CITATION.cff) | Citation metadata |
+| [`NOTICE.md`](NOTICE.md) | Third-party notices and attributions |
+| [`LICENSE`](LICENSE) | MIT license text |
 
-  [`CONTRIBUTING.md`](CONTRIBUTING.md)                   Contribution workflow and
-                                                         development expectations
-
-  [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)             Community standards
-
-  [`SECURITY.md`](SECURITY.md)                           Security reporting policy
-
-  [`SUPPORT.md`](SUPPORT.md)                             Support channels
-
-  [`REPOSITORY_HARDENING.md`](REPOSITORY_HARDENING.md)   Security architecture and
-                                                         repository hardening
-
-  [`CITATION.cff`](CITATION.cff)                         Citation metadata
-
-  [`NOTICE.md`](NOTICE.md)                               Third-party notices and
-                                                         attributions
-
-  [`LICENSE`](LICENSE)                                   MIT license text
-  ------------------------------------------------------------------------------------------
-
-------------------------------------------------------------------------
+---
 
 ## ✦ Release status
 
-HAWKLYX is preparing its first stable `v1.0.0` release. Until a release
-is published, the repository source and CI status are the authoritative
-references for build readiness.
+HAWKLYX is preparing its first stable `v1.0.0` release. Until a release is published, the repository source and CI status are the authoritative references for build readiness.
 
--   [GitHub Releases](https://github.com/Greenhawk5/HAWKLYX/releases)
--   [CI
-    runs](https://github.com/Greenhawk5/HAWKLYX/actions/workflows/ci.yml)
--   [Report a bug](https://github.com/Greenhawk5/HAWKLYX/issues/new)
+- [GitHub Releases](https://github.com/Greenhawk5/HAWKLYX/releases)
+- [CI runs](https://github.com/Greenhawk5/HAWKLYX/actions/workflows/ci.yml)
+- [Report a bug](https://github.com/Greenhawk5/HAWKLYX/issues/new)
 
-Release artifacts, signing, and release tags should only be considered
-official when published by the repository owner.
+Release artifacts, signing, and release tags should only be considered official when published by the repository owner.
 
-------------------------------------------------------------------------
+---
 
 ## ✦ License
 
-HAWKLYX is distributed under the [MIT License](LICENSE). See the license
-file for the complete terms.
+HAWKLYX is distributed under the [MIT License](LICENSE). See the license file for the complete terms.
 
 ## ✦ Author
 
 **Ali Faniani**
 
-```{=html}
-<p>
-```
-`<a href="https://github.com/Greenhawk5">`{=html}GitHub
-profile`</a>`{=html}  · 
-`<a href="https://github.com/Greenhawk5/HAWKLYX">`{=html}HAWKLYX
-repository`</a>`{=html}
-```{=html}
-</p>
-```
-::: {align="center"}
+- [GitHub profile](https://github.com/Greenhawk5)
+- [HAWKLYX repository](https://github.com/Greenhawk5/HAWKLYX)
 
-------------------------------------------------------------------------
+<div align="center">
 
-`<sub>`{=html}Built with Kotlin, Jetpack Compose, Android Widgets,
-TypeScript, and Cloudflare Workers.`</sub>`{=html}
-:::
+---
+
+*Built with Kotlin, Jetpack Compose, Android Widgets, TypeScript, and Cloudflare Workers.*
+
+</div>

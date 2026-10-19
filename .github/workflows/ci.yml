@@ -24,10 +24,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Node.js 20.x
+      - name: Set up Node.js 22.x
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
           cache-dependency-path: 'backend/worker/package-lock.json'
 
@@ -67,13 +67,49 @@ jobs:
           java-version: '21'
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
 
-      - name: Accept Android licenses and install platform
+      - name: Accept Android SDK licenses
+        run: yes | sdkmanager --licenses
+
+      - name: Install Android SDK Build Tools
+        run: sdkmanager "build-tools;36.0.0"
+
+      - name: Install Android SDK Platform 37
         run: |
-          yes | sdkmanager --licenses || true
-          sdkmanager --channel=3 "platforms;android-37" || true
-          sdkmanager "platforms;android-37" "cmdline-tools;latest" || true
+          if ! sdkmanager "platforms;android-37.0"; then
+            echo "Direct installation of platforms;android-37.0 failed; attempting platforms;android-37..."
+            sdkmanager "platforms;android-37"
+          fi
+          if [ -d "$ANDROID_HOME/platforms/android-37.0" ] && [ ! -d "$ANDROID_HOME/platforms/android-37" ]; then
+            ln -s "$ANDROID_HOME/platforms/android-37.0" "$ANDROID_HOME/platforms/android-37"
+          fi
+
+      - name: Verify Android SDK Platform and Build Tools
+        run: |
+          echo "Verifying Android SDK installation in $ANDROID_HOME..."
+
+          # Verify required build tools (resolved by AGP 9.4.1)
+          if [ ! -d "$ANDROID_HOME/build-tools/36.0.0" ]; then
+            echo "::error::Required Android SDK Build Tools 36.0.0 not found in $ANDROID_HOME/build-tools."
+            echo "Available build tools:"
+            ls -la "$ANDROID_HOME/build-tools" || true
+            exit 1
+          fi
+          echo "Verified: Android SDK Build Tools 36.0.0 is present."
+
+          # Verify required platform 37
+          if [ ! -d "$ANDROID_HOME/platforms/android-37" ] && [ ! -d "$ANDROID_HOME/platforms/android-37.0" ]; then
+            echo "::error::Required Android SDK Platform 37 not found in $ANDROID_HOME/platforms."
+            echo "Available platforms:"
+            ls -la "$ANDROID_HOME/platforms" || true
+            exit 1
+          fi
+          echo "Verified: Android SDK Platform 37 is present."
+
+          echo "Android SDK environment successfully verified."
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
