@@ -26,6 +26,10 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="ir.alifaniani.hawklyx.ACTION_OPEN_FROM_WIDGET" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
         </activity>
 
         <!-- HAWKLYX Home Screen Widget Receiver: Market Snapshot -->

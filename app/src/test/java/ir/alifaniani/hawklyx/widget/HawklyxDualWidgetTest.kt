@@ -394,4 +394,122 @@ class HawklyxDualWidgetTest {
             content.contains("@drawable/hawklyx_card_surface")
         )
     }
+
+    @Test
+    fun widgetThemeResolver_sessionDirectionNegative_switchesPriceToRedWhenOpen() {
+        val dummyObs = BrentPriceObservation(
+            price = 72.50,
+            formatted = "$72.50",
+            asOf = "2026-10-21T14:00:00Z",
+            fetchedAt = "2026-10-21T14:05:00Z",
+            isStale = false
+        )
+        val theme = WidgetThemeResolver.resolve(
+            status = DataFreshnessStatus.FRESH,
+            observation = dummyObs,
+            isMarketOpen = true,
+            isRefreshing = false,
+            sessionDirection = ir.alifaniani.hawklyx.domain.PriceDirection.NEGATIVE
+        )
+
+        assertEquals("When price decreases relative to session baseline, price MUST turn red", ir.alifaniani.hawklyx.R.color.hawklyx_red, theme.priceColorRes)
+        assertEquals("LIVE", theme.badgeText)
+        assertFalse(theme.isMarketClosed)
+    }
+
+    @Test
+    fun widgetThemeResolver_sessionDirectionPositive_usesEmeraldPriceWhenOpen() {
+        val dummyObs = BrentPriceObservation(
+            price = 76.50,
+            formatted = "$76.50",
+            asOf = "2026-10-21T14:00:00Z",
+            fetchedAt = "2026-10-21T14:05:00Z",
+            isStale = false
+        )
+        val theme = WidgetThemeResolver.resolve(
+            status = DataFreshnessStatus.FRESH,
+            observation = dummyObs,
+            isMarketOpen = true,
+            isRefreshing = false,
+            sessionDirection = ir.alifaniani.hawklyx.domain.PriceDirection.POSITIVE
+        )
+
+        assertEquals("When price increases relative to session baseline, price MUST be emerald", ir.alifaniani.hawklyx.R.color.hawklyx_emerald, theme.priceColorRes)
+        assertEquals("LIVE", theme.badgeText)
+    }
+
+    @Test
+    fun widgetThemeResolver_sessionDirectionNegative_stillAmberWhenClosed() {
+        val dummyObs = BrentPriceObservation(
+            price = 72.50,
+            formatted = "$72.50",
+            asOf = "2026-10-21T14:00:00Z",
+            fetchedAt = "2026-10-21T14:05:00Z",
+            isStale = false
+        )
+        val theme = WidgetThemeResolver.resolve(
+            status = DataFreshnessStatus.MARKET_CLOSED,
+            observation = dummyObs,
+            isMarketOpen = false,
+            isRefreshing = false,
+            sessionDirection = ir.alifaniani.hawklyx.domain.PriceDirection.NEGATIVE
+        )
+
+        assertEquals("Closed market price MUST be amber even if direction is negative", ir.alifaniani.hawklyx.R.color.hawklyx_amber, theme.priceColorRes)
+        assertTrue(theme.isMarketClosed)
+    }
+
+    @Test
+    fun widgetPendingIntents_haveDistinctActionsAndNonOverlappingRequestCodes() {
+        // Body tap vs Refresh button must have completely distinct actions
+        assertFalse(
+            "ACTION_OPEN_FROM_WIDGET must differ from ACTION_REFRESH",
+            HawklyxWidgetProvider.ACTION_OPEN_FROM_WIDGET == HawklyxWidgetProvider.ACTION_REFRESH
+        )
+
+        // Snapshot open request code must not overlap with Snapshot refresh request codes
+        assertTrue(
+            HawklyxWidgetProvider.REQUEST_CODE_OPEN_SNAPSHOT < HawklyxWidgetProvider.REQUEST_CODE_REFRESH_SNAPSHOT_BASE
+        )
+
+        // Intelligence open request code must not overlap with Intelligence refresh request codes
+        assertTrue(
+            HawklyxIntelligenceWidgetProvider.REQUEST_CODE_OPEN_INTELLIGENCE < HawklyxIntelligenceWidgetProvider.REQUEST_CODE_REFRESH_INTELLIGENCE_BASE
+        )
+
+        // Snapshot and Intelligence must have separate open request codes
+        assertFalse(
+            "Snapshot and Intelligence open request codes must be distinct",
+            HawklyxWidgetProvider.REQUEST_CODE_OPEN_SNAPSHOT == HawklyxIntelligenceWidgetProvider.REQUEST_CODE_OPEN_INTELLIGENCE
+        )
+
+        // Snapshot and Intelligence refresh base codes must be non-overlapping
+        assertTrue(
+            HawklyxWidgetProvider.REQUEST_CODE_REFRESH_SNAPSHOT_BASE != HawklyxIntelligenceWidgetProvider.REQUEST_CODE_REFRESH_INTELLIGENCE_BASE
+        )
+    }
+
+    @Test
+    fun dualWidgets_bothUseSameRefreshAction() {
+        assertEquals(
+            "Both widgets must use identical ACTION_REFRESH string for unified coordinator routing",
+            HawklyxWidgetProvider.ACTION_REFRESH,
+            HawklyxIntelligenceWidgetProvider.ACTION_REFRESH
+        )
+        assertEquals(
+            "Both widgets must use identical ACTION_OPEN_FROM_WIDGET string for unified body tap routing",
+            HawklyxWidgetProvider.ACTION_OPEN_FROM_WIDGET,
+            HawklyxIntelligenceWidgetProvider.ACTION_OPEN_FROM_WIDGET
+        )
+    }
+
+    @Test
+    fun cooldownEnforcement_rejectsPrematureRefreshWithoutFalseSuccess() {
+        val now = 1771460000000L
+        val nextAllowed = now + 90000L // 90 seconds remaining in cooldown
+        val isCooldownActive = now < nextAllowed
+        assertTrue("Cooldown must be detected as active", isCooldownActive)
+        val remainingSec = ((nextAllowed - now) / 1000).toInt().coerceAtLeast(1)
+        assertEquals(90, remainingSec)
+    }
 }

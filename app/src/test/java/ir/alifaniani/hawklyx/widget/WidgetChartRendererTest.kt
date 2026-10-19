@@ -91,4 +91,54 @@ class WidgetChartRendererTest {
         assertEquals(2000L, sorted[1].timestampMs)
         assertEquals(3000L, sorted[2].timestampMs)
     }
+
+    @Test
+    fun resolveLineColor_marketOpenNegativeSession_resolvesRed() {
+        val color = WidgetChartRenderer.resolveLineColor(
+            isStale = false,
+            isMarketClosed = false,
+            sessionDirection = ir.alifaniani.hawklyx.domain.PriceDirection.NEGATIVE
+        )
+        assertEquals("Negative active session MUST render red line", WidgetChartRenderer.COLOR_RED, color)
+    }
+
+    @Test
+    fun resolveLineColor_marketOpenPositiveSession_resolvesEmerald() {
+        val color = WidgetChartRenderer.resolveLineColor(
+            isStale = false,
+            isMarketClosed = false,
+            sessionDirection = ir.alifaniani.hawklyx.domain.PriceDirection.POSITIVE
+        )
+        assertEquals("Positive active session MUST render emerald line", WidgetChartRenderer.COLOR_EMERALD, color)
+    }
+
+    @Test
+    fun resolveLineColor_marketOpenNeutralSession_resolvesEmerald() {
+        val color = WidgetChartRenderer.resolveLineColor(
+            isStale = false,
+            isMarketClosed = false,
+            sessionDirection = ir.alifaniani.hawklyx.domain.PriceDirection.NEUTRAL
+        )
+        assertEquals("Neutral active session MUST render emerald line", WidgetChartRenderer.COLOR_EMERALD, color)
+    }
+
+    @Test
+    fun resolveLineColor_marketClosed_resolvesAmberEvenIfSessionNegative() {
+        val color = WidgetChartRenderer.resolveLineColor(
+            isStale = false,
+            isMarketClosed = true,
+            sessionDirection = ir.alifaniani.hawklyx.domain.PriceDirection.NEGATIVE
+        )
+        assertEquals("Closed market MUST render amber line even if session direction negative", WidgetChartRenderer.COLOR_AMBER, color)
+    }
+
+    @Test
+    fun resolveLineColor_staleOrOffline_resolvesAmberEvenIfSessionPositive() {
+        val color = WidgetChartRenderer.resolveLineColor(
+            isStale = true,
+            isMarketClosed = false,
+            sessionDirection = ir.alifaniani.hawklyx.domain.PriceDirection.POSITIVE
+        )
+        assertEquals("Stale/offline state MUST render amber line", WidgetChartRenderer.COLOR_AMBER, color)
+    }
 }

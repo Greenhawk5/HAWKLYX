@@ -73,6 +73,9 @@ import ir.alifaniani.hawklyx.ui.theme.HawklyxSurfaceVariant
 import ir.alifaniani.hawklyx.ui.theme.HawklyxTextMuted
 import ir.alifaniani.hawklyx.ui.theme.HawklyxTextPrimary
 import ir.alifaniani.hawklyx.ui.theme.HawklyxTextSecondary
+import ir.alifaniani.hawklyx.domain.BrentMarketCalendar
+import ir.alifaniani.hawklyx.domain.HawklyxPriceColorResolver
+import ir.alifaniani.hawklyx.domain.PriceDirection
 import ir.alifaniani.hawklyx.util.HawklyxTimeUtils
 import java.time.Instant
 import java.time.ZoneId
@@ -87,7 +90,7 @@ import java.util.Locale
 /**
  * Centralized color resolver for the initial/current price in Market History.
  * Follows identical semantic rules to the rest of HAWKLYX:
- * - Market open & fresh: HawklyxEmerald
+ * - Market open & fresh: HawklyxEmerald (when positive), HawklyxRed (when negative)
  * - Market closed / stale / offline: HawklyxAmber
  * - Quota exhausted: HawklyxTextSecondary
  * - No data: HawklyxTextMuted
@@ -96,15 +99,16 @@ object MarketHistoryPriceColorResolver {
     fun resolve(
         observation: BrentPriceObservation?,
         status: DataFreshnessStatus,
-        isMarketClosed: Boolean
-    ): Color = when {
-        observation == null -> HawklyxTextMuted
-        isMarketClosed || status == DataFreshnessStatus.MARKET_CLOSED -> HawklyxAmber
-        status == DataFreshnessStatus.FRESH -> HawklyxEmerald
-        status == DataFreshnessStatus.STALE || status == DataFreshnessStatus.PROVIDER_UNAVAILABLE || status == DataFreshnessStatus.INVALID_RESPONSE -> HawklyxAmber
-        status == DataFreshnessStatus.QUOTA_EXHAUSTED -> HawklyxTextSecondary
-        else -> HawklyxTextPrimary
-    }
+        isMarketClosed: Boolean,
+        sessionDirection: PriceDirection = PriceDirection.NEUTRAL,
+        isBaselineAvailable: Boolean = true
+    ): Color = HawklyxPriceColorResolver.resolveComposeColor(
+        observation = observation,
+        status = status,
+        isMarketClosed = isMarketClosed,
+        sessionDirection = sessionDirection,
+        isBaselineAvailable = isBaselineAvailable
+    )
 }
 
 @Composable
@@ -113,6 +117,8 @@ fun MarketHistoryChart(
     currentObservation: BrentPriceObservation?,
     status: DataFreshnessStatus = DataFreshnessStatus.FRESH,
     isMarketClosed: Boolean = false,
+    sessionDirection: PriceDirection = PriceDirection.NEUTRAL,
+    isBaselineAvailable: Boolean = true,
     onSelectRange: (HistoryRange) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -121,10 +127,12 @@ fun MarketHistoryChart(
     val summary = historyData?.summary
     val selectedRange = historyUiState.selectedRange
 
-    val initialPriceColor = MarketHistoryPriceColorResolver.resolve(
+    val currentPriceColor = MarketHistoryPriceColorResolver.resolve(
         observation = currentObservation,
         status = status,
-        isMarketClosed = isMarketClosed
+        isMarketClosed = isMarketClosed,
+        sessionDirection = sessionDirection,
+        isBaselineAvailable = isBaselineAvailable
     )
 
     Column(
@@ -165,7 +173,8 @@ fun MarketHistoryChart(
                 isStale = historyUiState.isStale,
                 isMarketClosed = isMarketClosed,
                 isPartial = historyData?.isPartial == true,
-                hasPoints = points.size >= 2
+                hasPoints = points.size >= 2,
+                resolvedColor = currentPriceColor
             )
         }
 
@@ -189,14 +198,19 @@ fun MarketHistoryChart(
                     points = points,
                     summary = summary,
                     range = selectedRange,
-                    resolution = historyData?.resolution ?: "hourly"
+                    resolution = historyData?.resolution ?: "hourly",
+                    currentObservation = currentObservation,
+                    status = status,
+                    isMarketClosed = isMarketClosed,
+                    sessionDirection = sessionDirection,
+                    currentPriceColor = currentPriceColor
                 )
             }
             else -> {
                 AccumulatingHistoryState(
                     currentObservation = currentObservation,
                     collectionStartDate = historyData?.collectionStartDate,
-                    priceColor = initialPriceColor
+                    priceColor = currentPriceColor
                 )
             }
         }
@@ -288,7 +302,8 @@ private fun HistoryStatusBadge(
     isStale: Boolean,
     isMarketClosed: Boolean,
     isPartial: Boolean,
-    hasPoints: Boolean
+    hasPoints: Boolean,
+    resolvedColor: Color = HawklyxEmerald
 ) {
     val (badgeText, badgeBg, badgeBorder, badgeColor) = when {
         isStale -> Quad(
@@ -309,12 +324,20 @@ private fun HistoryStatusBadge(
             HawklyxBorder,
             HawklyxTextSecondary
         )
-        hasPoints -> Quad(
-            "LIVE TREND",
-            HawklyxButtonEmeraldContainer,
-            HawklyxButtonEmeraldBorder,
-            HawklyxEmerald
-        )
+        hasPoints -> {
+            val (bg, border) = when (resolvedColor) {
+                HawklyxRed -> Pair(HawklyxRed.copy(alpha = 0.12f), HawklyxRed.copy(alpha = 0.30f))
+                HawklyxAmber -> Pair(HawklyxButtonClosedContainer, HawklyxButtonClosedBorder)
+                HawklyxEmerald -> Pair(HawklyxButtonEmeraldContainer, HawklyxButtonEmeraldBorder)
+                else -> Pair(HawklyxSurfaceVariant, HawklyxBorder)
+            }
+            Quad(
+                "LIVE TREND",
+                bg,
+                border,
+                resolvedColor
+            )
+        }
         else -> Quad(
             "ACCUMULATING",
             HawklyxSurfaceVariant,
@@ -356,7 +379,12 @@ private fun ActiveHistoryCanvasChart(
     points: List<HistoricalPointModel>,
     summary: HistorySummaryModel?,
     range: HistoryRange,
-    resolution: String
+    resolution: String,
+    currentObservation: BrentPriceObservation?,
+    status: DataFreshnessStatus,
+    isMarketClosed: Boolean,
+    sessionDirection: PriceDirection,
+    currentPriceColor: Color
 ) {
     var scrubbedIndex by remember(points) { mutableStateOf<Int?>(null) }
 
@@ -365,15 +393,25 @@ private fun ActiveHistoryCanvasChart(
     val maxPrice = summary?.high ?: prices.maxOrNull() ?: 0.0
     val priceRange = if (maxPrice > minPrice) maxPrice - minPrice else 1.0
 
+    val nowMs = currentObservation?.asOf?.let {
+        try { Instant.parse(it).toEpochMilli() } catch (_: Exception) { System.currentTimeMillis() }
+    } ?: (points.lastOrNull()?.timestampMs ?: System.currentTimeMillis())
+    val sessionInfo = BrentMarketCalendar.getSessionInfo(nowMs)
+    val currentSessionStartMs = sessionInfo.sessionStartEpochMs
+
     val activePoint = scrubbedIndex?.let { points.getOrNull(it) } ?: points.lastOrNull()
+    val isScrubbing = scrubbedIndex != null
+    val isCurrentSessionPoint = range == HistoryRange.ONE_DAY || (activePoint != null && activePoint.timestampMs >= currentSessionStartMs)
 
     // 1. Interactive Metrics Inspection Bar
     InspectionSummaryHeader(
         activePoint = activePoint,
         summary = summary,
-        isScrubbing = scrubbedIndex != null,
+        isScrubbing = isScrubbing,
         range = range,
-        isDaily = resolution == "daily"
+        isDaily = resolution == "daily",
+        currentPriceColor = currentPriceColor,
+        isCurrentSessionPoint = isCurrentSessionPoint
     )
 
     Spacer(modifier = Modifier.height(10.dp))
@@ -438,7 +476,10 @@ private fun ActiveHistoryCanvasChart(
                 Offset(x, y)
             }
 
-            // C. Draw Emerald Gradient Area
+            // C. Authoritative Trend Color for All Visual Components
+            val chartTrendColor = currentPriceColor
+
+            // D. Draw Area Fill across all ranges (1D, 1W, 1M, 6M, 1Y)
             val fillPath = Path().apply {
                 moveTo(coords.first().x, height - padBottom)
                 coords.forEach { lineTo(it.x, it.y) }
@@ -450,15 +491,15 @@ private fun ActiveHistoryCanvasChart(
                 path = fillPath,
                 brush = Brush.verticalGradient(
                     colors = listOf(
-                        HawklyxEmerald.copy(alpha = 0.20f),
-                        HawklyxEmerald.copy(alpha = 0.01f)
+                        chartTrendColor.copy(alpha = 0.20f),
+                        chartTrendColor.copy(alpha = 0.01f)
                     ),
                     startY = padTop,
                     endY = height - padBottom
                 )
             )
 
-            // D. Draw Primary Trend Line
+            // E. Draw Continuous Authentic Chart Line across all ranges (1D, 1W, 1M, 6M, 1Y)
             val linePath = Path().apply {
                 coords.forEachIndexed { i, pt ->
                     if (i == 0) moveTo(pt.x, pt.y) else lineTo(pt.x, pt.y)
@@ -467,7 +508,7 @@ private fun ActiveHistoryCanvasChart(
 
             drawPath(
                 path = linePath,
-                color = HawklyxEmerald,
+                color = chartTrendColor,
                 style = Stroke(
                     width = 2.2.dp.toPx(),
                     cap = StrokeCap.Round,
@@ -475,7 +516,7 @@ private fun ActiveHistoryCanvasChart(
                 )
             )
 
-            // E. Draw Nodes (if point density permits clean rendering)
+            // F. Data Points & Latest Observation Endpoint Marker
             if (points.size <= 32) {
                 coords.forEachIndexed { index, offset ->
                     val isSelected = (index == scrubbedIndex)
@@ -483,37 +524,49 @@ private fun ActiveHistoryCanvasChart(
                     val alpha = if (isSelected) 1f else 0.5f
 
                     drawCircle(
-                        color = HawklyxEmerald.copy(alpha = alpha),
+                        color = chartTrendColor.copy(alpha = alpha),
                         radius = radius,
                         center = offset
                     )
                 }
+            } else {
+                // Latest observation endpoint marker
+                drawCircle(
+                    color = chartTrendColor,
+                    radius = 4.dp.toPx(),
+                    center = coords.last()
+                )
             }
 
-            // F. Draw Interactive Crosshair & Target Node when Scrubbing
+            // G. Draw Interactive Crosshair & Target Node when Scrubbing
             scrubbedIndex?.let { idx ->
                 val targetOffset = coords.getOrNull(idx)
                 if (targetOffset != null) {
+                    val targetColor = chartTrendColor
+                    val glowColor = chartTrendColor.copy(alpha = 0.25f)
+
                     // Vertical Crosshair Guideline
                     drawLine(
-                        color = HawklyxEmerald.copy(alpha = 0.6f),
+                        color = targetColor.copy(alpha = 0.6f),
                         start = Offset(targetOffset.x, padTop),
                         end = Offset(targetOffset.x, height - padBottom),
                         strokeWidth = 1.dp.toPx(),
                         pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f), 0f)
                     )
 
-                    // Target Highlight Glow
+                    // Target Highlight Glow (Halo)
                     drawCircle(
-                        color = HawklyxEmeraldGlow,
+                        color = glowColor,
                         radius = 12.dp.toPx(),
                         center = targetOffset
                     )
+                    // Selected Point Ring
                     drawCircle(
-                        color = HawklyxEmerald,
+                        color = targetColor,
                         radius = 5.dp.toPx(),
                         center = targetOffset
                     )
+                    // Inner Cutout
                     drawCircle(
                         color = Color(0xFF101311),
                         radius = 2.5.dp.toPx(),
@@ -564,9 +617,24 @@ private fun InspectionSummaryHeader(
     summary: HistorySummaryModel?,
     isScrubbing: Boolean,
     range: HistoryRange,
-    isDaily: Boolean
+    isDaily: Boolean,
+    currentPriceColor: Color,
+    isCurrentSessionPoint: Boolean
 ) {
     if (activePoint == null) return
+
+    val displayPriceColor = currentPriceColor
+
+    val statusLabel = when {
+        !isScrubbing -> "LATEST OBSERVATION"
+        isCurrentSessionPoint -> "INSPECTING (CURRENT SESSION)"
+        else -> "INSPECTING"
+    }
+
+    val statusLabelColor = when {
+        !isScrubbing -> HawklyxTextMuted
+        else -> currentPriceColor
+    }
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -580,7 +648,7 @@ private fun InspectionSummaryHeader(
                     text = activePoint.formatted,
                     style = MaterialTheme.typography.headlineSmall.copy(
                         fontWeight = FontWeight.Bold,
-                        color = HawklyxTextPrimary,
+                        color = displayPriceColor,
                         fontSize = 24.sp
                     )
                 )
@@ -606,10 +674,10 @@ private fun InspectionSummaryHeader(
             // Timestamp Column
             Column(horizontalAlignment = Alignment.End) {
                 Text(
-                    text = if (isScrubbing) "INSPECTING" else "LATEST OBSERVATION",
+                    text = statusLabel,
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontWeight = FontWeight.Bold,
-                        color = if (isScrubbing) HawklyxEmerald else HawklyxTextMuted,
+                        color = statusLabelColor,
                         fontSize = 10.sp,
                         letterSpacing = 0.5.sp
                     )
@@ -651,7 +719,7 @@ private fun InspectionSummaryHeader(
                 Text(
                     text = "C: $%.2f".format(activePoint.close),
                     style = MaterialTheme.typography.labelSmall.copy(
-                        color = HawklyxEmerald,
+                        color = currentPriceColor,
                         fontWeight = FontWeight.Bold,
                         fontSize = 10.sp
                     )
@@ -739,7 +807,7 @@ private fun AccumulatingHistoryState(
                     .size(10.dp)
                     .alpha(pulseAlpha)
                     .clip(CircleShape)
-                    .background(HawklyxEmerald)
+                    .background(priceColor)
             )
             Spacer(modifier = Modifier.width(10.dp))
             Text(

@@ -12,9 +12,13 @@ import ir.alifaniani.hawklyx.data.model.PriceUiState
 import ir.alifaniani.hawklyx.data.remote.HawklyxApiClient
 import ir.alifaniani.hawklyx.data.schedule.UtcRefreshSchedule
 import ir.alifaniani.hawklyx.widget.HawklyxWidgetCoordinator
+import ir.alifaniani.hawklyx.domain.BrentMarketCalendar
 import ir.alifaniani.hawklyx.domain.HistoricalPoint
 import ir.alifaniani.hawklyx.domain.PriceChange24h
 import ir.alifaniani.hawklyx.domain.PriceChangeCalculator
+import ir.alifaniani.hawklyx.domain.SessionPriceCalculator
+import ir.alifaniani.hawklyx.domain.SessionPriceState
+import ir.alifaniani.hawklyx.data.model.MarketStateModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -82,6 +86,76 @@ class HawklyxRepository(
         )
     }
 
+    private fun computeSessionPriceState(
+        observation: BrentPriceObservation?,
+        localHistory: List<HistoricalObservationPoint>,
+        status: DataFreshnessStatus,
+        marketState: MarketStateModel?,
+        fallbackNowMs: Long
+    ): SessionPriceState {
+        if (observation == null || observation.price <= 0.0) {
+            return SessionPriceState.unavailable()
+        }
+        val currentTimestampMs = if (observation.asOf.isNotBlank()) {
+            try { Instant.parse(observation.asOf).toEpochMilli() } catch (_: Exception) { fallbackNowMs }
+        } else {
+            fallbackNowMs
+        }
+
+        val sessionInfo = BrentMarketCalendar.getSessionInfo(currentTimestampMs)
+        val isMarketOpen = (marketState?.isOpen ?: (status != DataFreshnessStatus.MARKET_CLOSED)) && sessionInfo.isMarketOpen
+
+        if (!isMarketOpen || status == DataFreshnessStatus.MARKET_CLOSED) {
+            return SessionPriceCalculator.calculateSessionPrice(
+                currentPrice = observation.price,
+                referencePrice = preferences.getSessionReferencePrice(),
+                referenceTimestampMs = preferences.getSessionReferenceTimestampMs(),
+                sessionId = sessionInfo.sessionId,
+                isMarketOpen = false,
+                isStale = false
+            )
+        }
+
+        val isStale = observation.isStale || status == DataFreshnessStatus.STALE ||
+                status == DataFreshnessStatus.PROVIDER_UNAVAILABLE || status == DataFreshnessStatus.INVALID_RESPONSE
+
+        val savedSessionId = preferences.getSessionId()
+        var refPrice = preferences.getSessionReferencePrice()
+        var refTimestampMs = preferences.getSessionReferenceTimestampMs()
+
+        if (savedSessionId != sessionInfo.sessionId || refPrice <= 0.0) {
+            val allPoints = mutableListOf<HistoricalPoint>()
+            preferences.getCachedHistoryResponse(HistoryRange.ONE_WEEK)?.points?.let {
+                allPoints.addAll(it)
+            }
+            allPoints.addAll(localHistory)
+
+            val baselinePoint = SessionPriceCalculator.findSessionReferencePoint(
+                sessionStartEpochMs = sessionInfo.sessionStartEpochMs,
+                points = allPoints
+            )
+
+            if (baselinePoint != null) {
+                refPrice = baselinePoint.price
+                refTimestampMs = baselinePoint.timestampMs
+                preferences.saveSessionReference(sessionInfo.sessionId, refPrice, refTimestampMs)
+            } else if (savedSessionId != sessionInfo.sessionId && observation.price > 0.0) {
+                refPrice = observation.price
+                refTimestampMs = currentTimestampMs
+                preferences.saveSessionReference(sessionInfo.sessionId, refPrice, refTimestampMs)
+            }
+        }
+
+        return SessionPriceCalculator.calculateSessionPrice(
+            currentPrice = observation.price,
+            referencePrice = refPrice,
+            referenceTimestampMs = refTimestampMs,
+            sessionId = sessionInfo.sessionId,
+            isMarketOpen = true,
+            isStale = isStale
+        )
+    }
+
     private fun loadInitialState(): PriceUiState {
         val cached = preferences.getLastObservation()
         val status = preferences.getLastStatus()
@@ -93,6 +167,7 @@ class HawklyxRepository(
         val nextCadenceMs = UtcRefreshSchedule.calculateNextCadenceEpochMs(now)
         val cadenceSec = UtcRefreshSchedule.getRemainingSeconds(now)
         val priceChange = computePriceChange(cached, history, now)
+        val sessionPrice = computeSessionPriceState(cached, history, status, null, now)
 
         return if (cached != null) {
             PriceUiState(
@@ -107,7 +182,8 @@ class HawklyxRepository(
                 history = history,
                 lastSyncAttemptTimeMs = preferences.getLastFetchTimeMs(),
                 lastSyncSuccess = true,
-                priceChange24h = priceChange
+                priceChange24h = priceChange,
+                sessionPriceState = sessionPrice
             )
         } else {
             PriceUiState(
@@ -122,7 +198,8 @@ class HawklyxRepository(
                 history = history,
                 lastSyncAttemptTimeMs = 0L,
                 lastSyncSuccess = false,
-                priceChange24h = PriceChange24h.unavailable()
+                priceChange24h = PriceChange24h.unavailable(),
+                sessionPriceState = SessionPriceState.unavailable()
             )
         }
     }
@@ -147,8 +224,22 @@ class HawklyxRepository(
     }
 
     /**
+     * Automatic synchronization on application launch or background schedule.
+     * Uses non-forced mode (force = false) to leverage cached quotes if fresh.
+     * Does NOT mark isRefreshing = true, does NOT trigger manual refresh feedback,
+     * and does NOT consume user refresh quota/cooldown.
+     */
+    suspend fun synchronizeOnLaunch(): PriceUiState {
+        return refreshPrice(force = false)
+    }
+
+    /**
      * Synchronizes the latest price observation from the edge service.
      * Enforces the 3-minute cooldown on manual forced refreshes and deduplicates concurrent calls.
+     *
+     * Invariants:
+     * - Only user-initiated manual refreshes (force = true) set isRefreshing = true.
+     * - Automatic/background sync (force = false) performs silent updates without manual UI lock.
      */
     suspend fun refreshPrice(force: Boolean = false): PriceUiState {
         return withContext(ioDispatcher) {
@@ -169,14 +260,16 @@ class HawklyxRepository(
                     return@withContext _uiState.value
                 }
 
-                // Reflect refreshing state while strictly preserving visible price and history
-                _uiState.update { current ->
-                    current.copy(
-                        isRefreshing = true,
-                        message = "Retrieving Brent crude price from edge service..."
-                    )
+                // Reflect refreshing state ONLY for manual user-initiated refresh
+                if (force) {
+                    _uiState.update { current ->
+                        current.copy(
+                            isRefreshing = true,
+                            message = "Retrieving Brent crude price from edge service..."
+                        )
+                    }
+                    HawklyxWidgetCoordinator.updateRefreshingState(context, isRefreshing = true)
                 }
-                HawklyxWidgetCoordinator.notifyAllWidgets(context)
 
                 val result = apiClient.fetchLatestPrice(force)
                 result.fold(
@@ -194,6 +287,7 @@ class HawklyxRepository(
                             preferences.saveObservation(obs, status, nextTime, isMarketOpen)
                             val updatedHistory = preferences.getHistoricalPoints()
                             val priceChange = computePriceChange(obs, updatedHistory, now)
+                            val sessionPrice = computeSessionPriceState(obs, updatedHistory, status, networkResponse.marketState, now)
 
                             _uiState.update {
                                 PriceUiState(
@@ -209,7 +303,8 @@ class HawklyxRepository(
                                     lastSyncAttemptTimeMs = now,
                                     lastSyncSuccess = true,
                                     marketState = networkResponse.marketState,
-                                    priceChange24h = priceChange
+                                    priceChange24h = priceChange,
+                                    sessionPriceState = sessionPrice
                                 )
                             }
                         } else {
@@ -218,6 +313,7 @@ class HawklyxRepository(
                             preferences.saveStatusOnly(status, nextTime, isMarketOpen)
                             val updatedHistory = preferences.getHistoricalPoints()
                             val priceChange = computePriceChange(lastObs, updatedHistory, now)
+                            val sessionPrice = computeSessionPriceState(lastObs, updatedHistory, if (lastObs != null) DataFreshnessStatus.STALE else status, networkResponse.marketState, now)
 
                             _uiState.update {
                                 PriceUiState(
@@ -233,7 +329,8 @@ class HawklyxRepository(
                                     lastSyncAttemptTimeMs = now,
                                     lastSyncSuccess = false,
                                     marketState = networkResponse.marketState,
-                                    priceChange24h = priceChange
+                                    priceChange24h = priceChange,
+                                    sessionPriceState = sessionPrice
                                 )
                             }
                         }
@@ -254,6 +351,7 @@ class HawklyxRepository(
                         val cadenceSec = UtcRefreshSchedule.getRemainingSeconds(now)
                         val cooldownSec = if (nextAllowedTime > now) ((nextAllowedTime - now) / 1000).toInt() else 0
                         val priceChange = computePriceChange(lastObs, updatedHistory, now)
+                        val sessionPrice = computeSessionPriceState(lastObs, updatedHistory, fallbackStatus, _uiState.value.marketState, now)
 
                         _uiState.update { current ->
                             PriceUiState(
@@ -269,14 +367,15 @@ class HawklyxRepository(
                                 lastSyncAttemptTimeMs = now,
                                 lastSyncSuccess = false,
                                 marketState = current.marketState,
-                                priceChange24h = priceChange
+                                priceChange24h = priceChange,
+                                sessionPriceState = sessionPrice
                             )
                         }
                     }
                 )
 
                 if (HawklyxWidgetCoordinator.hasIntelligenceWidgets(context)) {
-                    loadHistory(HistoryRange.ONE_WEEK, forceRefresh = false)
+                    loadHistory(HistoryRange.ONE_WEEK, forceRefresh = force)
                 }
                 HawklyxWidgetCoordinator.notifyAllWidgets(context)
                 _uiState.value
@@ -340,6 +439,13 @@ class HawklyxRepository(
                                     priceChange24h = computePriceChange(
                                         current.observation,
                                         current.history,
+                                        System.currentTimeMillis()
+                                    ),
+                                    sessionPriceState = computeSessionPriceState(
+                                        current.observation,
+                                        current.history,
+                                        current.status,
+                                        current.marketState,
                                         System.currentTimeMillis()
                                     )
                                 )

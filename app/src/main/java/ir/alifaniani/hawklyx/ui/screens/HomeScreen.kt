@@ -63,6 +63,7 @@ import ir.alifaniani.hawklyx.data.model.PriceUiState
 import ir.alifaniani.hawklyx.data.model.HistoryRange
 import ir.alifaniani.hawklyx.data.model.HistoryUiState
 import ir.alifaniani.hawklyx.data.schedule.UtcRefreshSchedule
+import ir.alifaniani.hawklyx.domain.HawklyxPriceColorResolver
 import ir.alifaniani.hawklyx.domain.PriceChange24h
 import ir.alifaniani.hawklyx.domain.PriceChangeDirection
 import ir.alifaniani.hawklyx.ui.components.HawklyxCircleLoader
@@ -133,6 +134,8 @@ fun HomeScreen(
                 currentObservation = uiState.observation,
                 status = uiState.status,
                 isMarketClosed = uiState.isMarketClosed,
+                sessionDirection = uiState.sessionPriceState.direction,
+                isBaselineAvailable = uiState.sessionPriceState.isAvailable,
                 onSelectRange = onSelectRange
             )
 
@@ -244,15 +247,12 @@ private fun HeroPriceCard(
     val cooldownSec = uiState.cooldownRemainingSeconds
     val isCooldownActive = cooldownSec > 0
 
-    val priceColor = when {
-        observation == null -> HawklyxTextMuted
-        isClosed -> HawklyxAmber
-        status == DataFreshnessStatus.FRESH -> HawklyxEmerald
-        status == DataFreshnessStatus.STALE -> HawklyxAmber
-        status == DataFreshnessStatus.PROVIDER_UNAVAILABLE -> HawklyxAmber
-        status == DataFreshnessStatus.QUOTA_EXHAUSTED -> HawklyxTextSecondary
-        else -> HawklyxTextPrimary
-    }
+    val priceColor = HawklyxPriceColorResolver.resolveComposeColor(
+        observation = observation,
+        status = status,
+        isMarketClosed = isClosed,
+        sessionDirection = uiState.sessionPriceState.direction
+    )
 
     val infiniteTransition = rememberInfiniteTransition(label = "badge_pulse")
     val pulseAlpha by infiniteTransition.animateFloat(
@@ -303,46 +303,96 @@ private fun HeroPriceCard(
         Spacer(modifier = Modifier.height(14.dp))
 
         // LAYER B — Dominant Price Display
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(
-                verticalAlignment = Alignment.Bottom,
-                modifier = Modifier.weight(1f, fill = false)
-            ) {
-                Text(
-                    text = observation?.formatted ?: "$--.--",
-                    style = MaterialTheme.typography.displayLarge.copy(
-                        fontSize = 44.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = (-0.5).sp,
-                        color = priceColor
-                    ),
-                    modifier = Modifier.alignByBaseline()
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = observation?.unit ?: "USD / barrel",
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = HawklyxTextSecondary
-                    ),
-                    modifier = Modifier
-                        .alignByBaseline()
-                        .padding(bottom = 2.dp)
-                )
+        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+            val isWide = maxWidth >= 420.dp
+            if (isWide) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Bottom,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.Bottom,
+                        modifier = Modifier.weight(1f, fill = false)
+                    ) {
+                        Text(
+                            text = observation?.formatted ?: "$--.--",
+                            style = MaterialTheme.typography.displayLarge.copy(
+                                fontSize = 44.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = (-0.5).sp,
+                                color = priceColor
+                            ),
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier.alignByBaseline()
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = observation?.unit ?: "USD / barrel",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = HawklyxTextSecondary
+                            ),
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier
+                                .alignByBaseline()
+                                .padding(bottom = 2.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    // 24-Hour Price Change Indicator Pill
+                    PriceChange24hBadge(
+                        priceChange = uiState.priceChange24h,
+                        modifier = Modifier.padding(bottom = 3.dp)
+                    )
+                }
+            } else {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        verticalAlignment = Alignment.Bottom,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = observation?.formatted ?: "$--.--",
+                            style = MaterialTheme.typography.displayLarge.copy(
+                                fontSize = 44.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = (-0.5).sp,
+                                color = priceColor
+                            ),
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier.alignByBaseline()
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = observation?.unit ?: "USD / barrel",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = HawklyxTextSecondary
+                            ),
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier
+                                .alignByBaseline()
+                                .padding(bottom = 2.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // 24-Hour Price Change Indicator Pill
+                    PriceChange24hBadge(
+                        priceChange = uiState.priceChange24h
+                    )
+                }
             }
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            // 24-Hour Price Change Indicator Pill
-            PriceChange24hBadge(
-                priceChange = uiState.priceChange24h,
-                modifier = Modifier.padding(bottom = 3.dp)
-            )
         }
 
         Spacer(modifier = Modifier.height(16.dp))

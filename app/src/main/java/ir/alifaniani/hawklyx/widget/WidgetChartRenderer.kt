@@ -7,6 +7,7 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Shader
 import ir.alifaniani.hawklyx.data.model.HistoricalPointModel
+import ir.alifaniani.hawklyx.domain.PriceDirection
 
 /**
  * Lightweight, static Android Canvas chart renderer for the HAWKLYX Market Intelligence widget.
@@ -20,12 +21,29 @@ import ir.alifaniani.hawklyx.data.model.HistoricalPointModel
 object WidgetChartRenderer {
 
     // Visual Palette aligned with HAWKLYX Design System
-    private const val COLOR_EMERALD = 0xFF62E59A.toInt()
-    private const val COLOR_EMERALD_FILL_TOP = 0x3362E59A.toInt()
-    private const val COLOR_AMBER = 0xFFE5B862.toInt()
-    private const val COLOR_AMBER_FILL_TOP = 0x33E5B862.toInt()
-    private const val COLOR_GRID_LINE = 0xFF1C241F.toInt()
-    private const val COLOR_TRANSPARENT = 0x00000000
+    const val COLOR_EMERALD = 0xFF62E59A.toInt()
+    const val COLOR_EMERALD_FILL_TOP = 0x3362E59A.toInt()
+    const val COLOR_RED = 0xFFFF6B6B.toInt()
+    const val COLOR_RED_FILL_TOP = 0x33FF6B6B.toInt()
+    const val COLOR_AMBER = 0xFFE5B862.toInt()
+    const val COLOR_AMBER_FILL_TOP = 0x33E5B862.toInt()
+    const val COLOR_GRID_LINE = 0xFF1C241F.toInt()
+    const val COLOR_TRANSPARENT = 0x00000000
+
+    /**
+     * Resolves the authoritative line and terminal-dot color for a given market state.
+     */
+    fun resolveLineColor(
+        isStale: Boolean,
+        isMarketClosed: Boolean,
+        sessionDirection: PriceDirection
+    ): Int {
+        return when {
+            isMarketClosed || isStale -> COLOR_AMBER
+            sessionDirection == PriceDirection.NEGATIVE -> COLOR_RED
+            else -> COLOR_EMERALD
+        }
+    }
 
     /**
      * Filters for strictly valid points with genuine positive finite numbers.
@@ -72,7 +90,9 @@ object WidgetChartRenderer {
         widthPx: Int = 640,
         heightPx: Int = 260,
         isStale: Boolean = false,
-        isMarketClosed: Boolean = false
+        isMarketClosed: Boolean = false,
+        sessionDirection: PriceDirection = PriceDirection.NEUTRAL,
+        sessionStartEpochMs: Long = 0L
     ): Bitmap? {
         val validPoints = getValidPoints(points)
 
@@ -130,7 +150,23 @@ object WidgetChartRenderer {
             yCoords[i] = (paddingTop + (1.0 - normalizedPrice) * plotHeight).toFloat()
         }
 
-        // 3. Construct line path
+        // 3. Resolve session bounds and color semantics
+        val effectiveSessionStart = if (sessionStartEpochMs > 0L) {
+            sessionStartEpochMs
+        } else {
+            val lastTs = validPoints.last().timestampMs
+            ir.alifaniani.hawklyx.domain.BrentMarketCalendar.getSessionInfo(lastTs).sessionStartEpochMs
+        }
+
+        val sessionLineColor = resolveLineColor(isStale, isMarketClosed, sessionDirection)
+
+        val sessionFillColor = when {
+            isMarketClosed || isStale -> COLOR_AMBER_FILL_TOP
+            sessionDirection == PriceDirection.NEGATIVE -> COLOR_RED_FILL_TOP
+            else -> COLOR_EMERALD_FILL_TOP
+        }
+
+        // 4. Construct area fill and line paths with unified trend color
         val linePath = Path().apply {
             moveTo(xCoords[0], yCoords[0])
             for (i in 1 until count) {
@@ -138,54 +174,46 @@ object WidgetChartRenderer {
             }
         }
 
-        // 4. Construct area fill path (closed down to bottom boundary)
         val fillPath = Path(linePath).apply {
             lineTo(xCoords[count - 1], heightPx - paddingBottom)
             lineTo(xCoords[0], heightPx - paddingBottom)
             close()
         }
 
-        // 5. Draw gradient fill
-        val fillTopColor = if (isStale) COLOR_AMBER_FILL_TOP else COLOR_EMERALD_FILL_TOP
         val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.FILL
             shader = LinearGradient(
                 0f, paddingTop,
                 0f, heightPx - paddingBottom,
-                fillTopColor, COLOR_TRANSPARENT,
+                sessionFillColor, COLOR_TRANSPARENT,
                 Shader.TileMode.CLAMP
             )
         }
         canvas.drawPath(fillPath, fillPaint)
 
-        // 6. Draw line stroke with rounded caps and joins
-        // The historical curve reflects genuine historical trades (emerald), unless the whole response is stale/offline (amber)
-        val strokeColor = if (isStale) COLOR_AMBER else COLOR_EMERALD
         val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
-            color = strokeColor
+            color = sessionLineColor
             strokeWidth = 3.5f
             strokeCap = Paint.Cap.ROUND
             strokeJoin = Paint.Join.ROUND
         }
         canvas.drawPath(linePath, strokePaint)
 
-        // 7. Draw latest observation highlight point at terminal coordinate
-        // In market-closed state, the terminal dot adopts amber accent to denote session close
-        val pointColor = if (isMarketClosed || isStale) COLOR_AMBER else COLOR_EMERALD
+        // 5. Draw terminal dot & halo at latest observation
         val lastX = xCoords[count - 1]
         val lastY = yCoords[count - 1]
 
         val haloPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.FILL
-            color = pointColor
+            color = sessionLineColor
             alpha = 70
         }
         canvas.drawCircle(lastX, lastY, 7.5f, haloPaint)
 
         val pointPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.FILL
-            color = pointColor
+            color = sessionLineColor
         }
         canvas.drawCircle(lastX, lastY, 3.5f, pointPaint)
 

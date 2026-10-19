@@ -317,6 +317,25 @@ class HawklyxPreferences(context: Context) {
         return prefs.getLong(KEY_CACHED_HISTORY_TIME, 0L)
     }
 
+    fun saveSessionReference(
+        sessionId: String,
+        referencePrice: Double,
+        referenceTimestampMs: Long
+    ) {
+        prefs.edit().apply {
+            putString(KEY_SESSION_ID, sessionId)
+            putFloat(KEY_SESSION_REFERENCE_PRICE, referencePrice.toFloat())
+            putLong(KEY_SESSION_REFERENCE_TIMESTAMP, referenceTimestampMs)
+            apply()
+        }
+    }
+
+    fun getSessionId(): String = prefs.getString(KEY_SESSION_ID, "") ?: ""
+
+    fun getSessionReferencePrice(): Double = prefs.getFloat(KEY_SESSION_REFERENCE_PRICE, 0f).toDouble()
+
+    fun getSessionReferenceTimestampMs(): Long = prefs.getLong(KEY_SESSION_REFERENCE_TIMESTAMP, 0L)
+
     fun clear() {
         prefs.edit().clear().apply()
     }
@@ -345,5 +364,8 @@ class HawklyxPreferences(context: Context) {
         private const val KEY_HISTORY = "history_json"
         private const val KEY_CACHED_HISTORY_JSON = "cached_history_json"
         private const val KEY_CACHED_HISTORY_TIME = "cached_history_time"
+        private const val KEY_SESSION_ID = "session_id"
+        private const val KEY_SESSION_REFERENCE_PRICE = "session_reference_price"
+        private const val KEY_SESSION_REFERENCE_TIMESTAMP = "session_reference_timestamp"
     }
 }

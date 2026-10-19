@@ -15,10 +15,13 @@ import ir.alifaniani.hawklyx.data.model.BrentPriceObservation
 import ir.alifaniani.hawklyx.data.model.DataFreshnessStatus
 import ir.alifaniani.hawklyx.data.repository.HawklyxRepository
 import ir.alifaniani.hawklyx.data.model.HistoryRange
+import ir.alifaniani.hawklyx.domain.BrentMarketCalendar
 import ir.alifaniani.hawklyx.domain.HistoricalPoint
 import ir.alifaniani.hawklyx.domain.PriceChange24h
 import ir.alifaniani.hawklyx.domain.PriceChangeCalculator
 import ir.alifaniani.hawklyx.domain.PriceChangeDirection
+import ir.alifaniani.hawklyx.domain.PriceDirection
+import ir.alifaniani.hawklyx.domain.SessionPriceCalculator
 import ir.alifaniani.hawklyx.util.HawklyxTimeUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -50,12 +53,16 @@ class HawklyxWidgetProvider : AppWidgetProvider() {
         super.onReceive(context, intent)
 
         if (intent.action == ACTION_REFRESH) {
-            HawklyxWidgetCoordinator.handleRefreshAction(context)
+            val pendingResult = goAsync()
+            HawklyxWidgetCoordinator.handleRefreshAction(context, pendingResult)
         }
     }
 
     companion object {
         const val ACTION_REFRESH = "ir.alifaniani.hawklyx.ACTION_REFRESH"
+        const val ACTION_OPEN_FROM_WIDGET = "ir.alifaniani.hawklyx.ACTION_OPEN_FROM_WIDGET"
+        const val REQUEST_CODE_OPEN_SNAPSHOT = 1001
+        const val REQUEST_CODE_REFRESH_SNAPSHOT_BASE = 2000
 
         fun notifyDataChanged(context: Context) {
             val appWidgetManager = AppWidgetManager.getInstance(context)
@@ -117,25 +124,26 @@ class HawklyxWidgetProvider : AppWidgetProvider() {
         }
 
         private fun setupClickIntents(context: Context, views: RemoteViews, appWidgetId: Int) {
-            // Setup Main Click -> Open MainActivity
+            // Setup Main Click -> Open MainActivity with explicit action and dedicated request code
             val mainIntent = Intent(context, MainActivity::class.java).apply {
+                action = ACTION_OPEN_FROM_WIDGET
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }
             val mainPendingIntent = PendingIntent.getActivity(
                 context,
-                0,
+                REQUEST_CODE_OPEN_SNAPSHOT,
                 mainIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             views.setOnClickPendingIntent(R.id.widget_root, mainPendingIntent)
 
-            // Setup Refresh Button Click -> Broadcast ACTION_REFRESH
+            // Setup Refresh Button Click -> Broadcast ACTION_REFRESH with distinct request code
             val refreshIntent = Intent(context, HawklyxWidgetProvider::class.java).apply {
                 action = ACTION_REFRESH
             }
             val refreshPendingIntent = PendingIntent.getBroadcast(
                 context,
-                appWidgetId,
+                REQUEST_CODE_REFRESH_SNAPSHOT_BASE + appWidgetId,
                 refreshIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
@@ -150,12 +158,36 @@ class HawklyxWidgetProvider : AppWidgetProvider() {
             isRefreshing: Boolean
         ) {
             val prefs = HawklyxPreferences(context)
-            val isMarketOpen = prefs.isMarketOpen()
+            val isMarketOpenPref = prefs.isMarketOpen()
+            val currentTs = if (observation != null && observation.asOf.isNotBlank()) {
+                try { Instant.parse(observation.asOf).toEpochMilli() } catch (_: Exception) { System.currentTimeMillis() }
+            } else System.currentTimeMillis()
+
+            val sessionInfo = BrentMarketCalendar.getSessionInfo(currentTs)
+            val isMarketOpen = isMarketOpenPref && sessionInfo.isMarketOpen && status != DataFreshnessStatus.MARKET_CLOSED
+
+            val sessionDirection = if (observation != null && observation.price > 0.0 && isMarketOpen) {
+                val isStale = observation.isStale || status == DataFreshnessStatus.STALE ||
+                        status == DataFreshnessStatus.PROVIDER_UNAVAILABLE || status == DataFreshnessStatus.INVALID_RESPONSE
+                val refPrice = prefs.getSessionReferencePrice()
+                SessionPriceCalculator.calculateSessionPrice(
+                    currentPrice = observation.price,
+                    referencePrice = refPrice,
+                    referenceTimestampMs = prefs.getSessionReferenceTimestampMs(),
+                    sessionId = sessionInfo.sessionId,
+                    isMarketOpen = true,
+                    isStale = isStale
+                ).direction
+            } else {
+                PriceDirection.NEUTRAL
+            }
+
             val theme = WidgetThemeResolver.resolve(
                 status = status,
                 observation = observation,
-                isMarketOpen = isMarketOpen,
-                isRefreshing = isRefreshing
+                isMarketOpen = isMarketOpenPref,
+                isRefreshing = isRefreshing,
+                sessionDirection = sessionDirection
             )
 
             // 1. Dominant Price & Currency display
@@ -181,9 +213,6 @@ class HawklyxWidgetProvider : AppWidgetProvider() {
             val allPoints = mutableListOf<HistoricalPoint>()
             prefs.getCachedHistoryResponse(HistoryRange.ONE_WEEK)?.points?.let { allPoints.addAll(it) }
             allPoints.addAll(prefs.getHistoricalPoints())
-            val currentTs = if (observation != null && observation.asOf.isNotBlank()) {
-                try { Instant.parse(observation.asOf).toEpochMilli() } catch (_: Exception) { System.currentTimeMillis() }
-            } else System.currentTimeMillis()
             val priceChange = if (observation != null) {
                 PriceChangeCalculator.calculate24hChange(observation.price, currentTs, allPoints)
             } else {

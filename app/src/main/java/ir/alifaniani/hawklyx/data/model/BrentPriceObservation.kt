@@ -2,6 +2,7 @@ package ir.alifaniani.hawklyx.data.model
 
 import ir.alifaniani.hawklyx.domain.HistoricalPoint
 import ir.alifaniani.hawklyx.domain.PriceChange24h
+import ir.alifaniani.hawklyx.domain.SessionPriceState
 
 /**
  * Validated Brent Crude price observation received from the HAWKLYX edge service.
@@ -73,7 +74,8 @@ data class PriceUiState(
     val lastSyncAttemptTimeMs: Long = 0L,
     val lastSyncSuccess: Boolean = false,
     val marketState: MarketStateModel? = null,
-    val priceChange24h: PriceChange24h = PriceChange24h.unavailable()
+    val priceChange24h: PriceChange24h = PriceChange24h.unavailable(),
+    val sessionPriceState: SessionPriceState = SessionPriceState.unavailable()
 ) {
     val isMarketClosed: Boolean
         get() = status == DataFreshnessStatus.MARKET_CLOSED || (marketState != null && !marketState.isOpen)

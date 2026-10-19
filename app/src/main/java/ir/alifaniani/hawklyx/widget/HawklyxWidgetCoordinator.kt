@@ -49,9 +49,17 @@ object HawklyxWidgetCoordinator {
     }
 
     /**
+     * Updates the refreshing state across all active HAWKLYX widgets.
+     */
+    fun updateRefreshingState(context: Context, isRefreshing: Boolean) {
+        HawklyxWidgetProvider.updateRefreshingState(context, isRefreshing)
+        HawklyxIntelligenceWidgetProvider.updateRefreshingState(context, isRefreshing)
+    }
+
+    /**
      * Centralized refresh handler triggered by ACTION_REFRESH from any widget instance.
      */
-    fun handleRefreshAction(context: Context) {
+    fun handleRefreshAction(context: Context, pendingResult: android.content.BroadcastReceiver.PendingResult? = null) {
         val prefs = HawklyxPreferences(context)
         val now = System.currentTimeMillis()
         val nextAllowed = prefs.getNextRefreshAllowedTimeMs()
@@ -61,31 +69,32 @@ object HawklyxWidgetCoordinator {
             val remainingSec = ((nextAllowed - now) / 1000).toInt().coerceAtLeast(1)
             HawklyxWidgetProvider.showCooldown(context, remainingSec)
             HawklyxIntelligenceWidgetProvider.showCooldown(context, remainingSec)
+            pendingResult?.finish()
+            return
+        }
+
+        // Deduplicate: if a refresh is already actively in-flight, ignore duplicate clicks
+        if (!refreshMutex.tryLock()) {
+            pendingResult?.finish()
             return
         }
 
         // 2. Immediately reflect syncing state across both widgets
-        HawklyxWidgetProvider.updateRefreshingState(context, isRefreshing = true)
-        HawklyxIntelligenceWidgetProvider.updateRefreshingState(context, isRefreshing = true)
+        updateRefreshingState(context, isRefreshing = true)
 
         // 3. Asynchronously execute synchronized refresh
         scope.launch {
-            if (refreshMutex.isLocked) {
-                // Deduplicate: refresh already actively in-flight
-                return@launch
-            }
-            refreshMutex.withLock {
+            try {
                 val repository = HawklyxRepository.getInstance(context)
-                // Synchronize price
+                // Synchronize price and authentic history if widgets active
                 repository.refreshPrice(force = true)
-
-                // If intelligence widgets are active, synchronize 7D history
-                if (hasIntelligenceWidgets(context)) {
-                    repository.loadHistory(HistoryRange.ONE_WEEK, forceRefresh = true)
-                }
-
+            } catch (_: Exception) {
+                // Network or repository exception handled; ensure widgets are updated with last-known good state
+            } finally {
                 // Finalize and broadcast fresh data to both widgets
                 notifyAllWidgets(context)
+                refreshMutex.unlock()
+                pendingResult?.finish()
             }
         }
     }

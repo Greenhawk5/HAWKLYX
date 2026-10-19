@@ -78,7 +78,7 @@ class MainActivity : ComponentActivity() {
 
                 // Synchronize on launch (non-forced to leverage edge cache if fresh)
                 LaunchedEffect(Unit) {
-                    repository.refreshPrice(force = false)
+                    repository.synchronizeOnLaunch()
                     repository.loadHistory(HistoryRange.ONE_MONTH, forceRefresh = false)
                 }
 

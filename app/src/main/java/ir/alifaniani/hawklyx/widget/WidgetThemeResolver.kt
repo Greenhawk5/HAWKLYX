@@ -3,6 +3,8 @@ package ir.alifaniani.hawklyx.widget
 import ir.alifaniani.hawklyx.R
 import ir.alifaniani.hawklyx.data.model.BrentPriceObservation
 import ir.alifaniani.hawklyx.data.model.DataFreshnessStatus
+import ir.alifaniani.hawklyx.domain.HawklyxPriceColorResolver
+import ir.alifaniani.hawklyx.domain.PriceDirection
 
 /**
  * Resolved visual theme for HAWKLYX home-screen widgets.
@@ -18,39 +20,45 @@ data class WidgetVisualTheme(
     val cadencePillText: String,
     val isMarketClosed: Boolean,
     val isStaleOrOffline: Boolean,
-    val isRefreshing: Boolean
+    val isRefreshing: Boolean,
+    val sessionDirection: PriceDirection = PriceDirection.NEUTRAL
 )
 
 object WidgetThemeResolver {
 
     /**
      * Resolves the visual theme based on data freshness status, observation presence,
-     * and authoritative market-open/closed state.
+     * authoritative market-open/closed state, and session price direction.
      *
      * Invariants:
      * - When market is closed (status == MARKET_CLOSED or isMarketOpen == false), price switches to HawklyxAmber.
-     * - When market is open and fresh, price is HawklyxEmerald.
+     * - When market is open and fresh:
+     *     - Price is HawklyxEmerald if price has increased relative to session close baseline (PriceDirection.POSITIVE).
+     *     - Price is HawklyxRed if price has decreased relative to session close baseline (PriceDirection.NEGATIVE).
+     *     - Price is HawklyxEmerald if price is equal to baseline (PriceDirection.NEUTRAL).
      * - When stale or provider unavailable, price switches to HawklyxAmber to signal cached quote.
      */
     fun resolve(
         status: DataFreshnessStatus,
         observation: BrentPriceObservation?,
         isMarketOpen: Boolean = true,
-        isRefreshing: Boolean = false
+        isRefreshing: Boolean = false,
+        sessionDirection: PriceDirection = PriceDirection.NEUTRAL
     ): WidgetVisualTheme {
         val hasObservation = observation != null
         val isClosed = status == DataFreshnessStatus.MARKET_CLOSED || !isMarketOpen
         val isStaleObs = observation?.isStale == true
 
+        val resolvedPriceColor = HawklyxPriceColorResolver.resolveResourceColor(
+            observation = observation,
+            status = if (isStaleObs && status == DataFreshnessStatus.FRESH) DataFreshnessStatus.STALE else status,
+            isMarketClosed = isClosed,
+            sessionDirection = sessionDirection
+        )
+
         if (isRefreshing) {
-            val basePriceColor = when {
-                !hasObservation -> R.color.hawklyx_text_muted
-                isClosed -> R.color.hawklyx_amber
-                status == DataFreshnessStatus.FRESH && !isStaleObs -> R.color.hawklyx_emerald
-                else -> R.color.hawklyx_amber
-            }
             return WidgetVisualTheme(
-                priceColorRes = basePriceColor,
+                priceColorRes = resolvedPriceColor,
                 badgeText = "SYNCING",
                 badgeTextColorRes = R.color.hawklyx_emerald,
                 badgeBgRes = R.drawable.hawklyx_badge_emerald,
@@ -58,14 +66,15 @@ object WidgetThemeResolver {
                 cadencePillText = if (isClosed) "LAST CLOSE" else "15M CADENCE",
                 isMarketClosed = isClosed,
                 isStaleOrOffline = false,
-                isRefreshing = true
+                isRefreshing = true,
+                sessionDirection = sessionDirection
             )
         }
 
         // 1. Authoritative MARKET CLOSED State
         if (isClosed) {
             return WidgetVisualTheme(
-                priceColorRes = if (hasObservation) R.color.hawklyx_amber else R.color.hawklyx_text_muted,
+                priceColorRes = resolvedPriceColor,
                 badgeText = "MARKET CLOSED",
                 badgeTextColorRes = R.color.hawklyx_amber,
                 badgeBgRes = R.drawable.hawklyx_badge_amber,
@@ -73,14 +82,15 @@ object WidgetThemeResolver {
                 cadencePillText = "LAST CLOSE",
                 isMarketClosed = true,
                 isStaleOrOffline = false,
-                isRefreshing = false
+                isRefreshing = false,
+                sessionDirection = sessionDirection
             )
         }
 
         // 2. STALE or Stale Observation Flag
         if (status == DataFreshnessStatus.STALE || isStaleObs) {
             return WidgetVisualTheme(
-                priceColorRes = if (hasObservation) R.color.hawklyx_amber else R.color.hawklyx_text_muted,
+                priceColorRes = resolvedPriceColor,
                 badgeText = "STALE",
                 badgeTextColorRes = R.color.hawklyx_amber,
                 badgeBgRes = R.drawable.hawklyx_badge_amber,
@@ -88,14 +98,15 @@ object WidgetThemeResolver {
                 cadencePillText = "CACHED",
                 isMarketClosed = false,
                 isStaleOrOffline = true,
-                isRefreshing = false
+                isRefreshing = false,
+                sessionDirection = sessionDirection
             )
         }
 
         // 3. OFFLINE / PROVIDER UNAVAILABLE
         if (status == DataFreshnessStatus.PROVIDER_UNAVAILABLE || status == DataFreshnessStatus.INVALID_RESPONSE) {
             return WidgetVisualTheme(
-                priceColorRes = if (hasObservation) R.color.hawklyx_amber else R.color.hawklyx_text_muted,
+                priceColorRes = resolvedPriceColor,
                 badgeText = "OFFLINE",
                 badgeTextColorRes = R.color.hawklyx_amber,
                 badgeBgRes = R.drawable.hawklyx_badge_amber,
@@ -103,14 +114,15 @@ object WidgetThemeResolver {
                 cadencePillText = "OFFLINE",
                 isMarketClosed = false,
                 isStaleOrOffline = true,
-                isRefreshing = false
+                isRefreshing = false,
+                sessionDirection = sessionDirection
             )
         }
 
         // 4. QUOTA EXHAUSTED
         if (status == DataFreshnessStatus.QUOTA_EXHAUSTED) {
             return WidgetVisualTheme(
-                priceColorRes = if (hasObservation) R.color.hawklyx_text_secondary else R.color.hawklyx_text_muted,
+                priceColorRes = resolvedPriceColor,
                 badgeText = "QUOTA LIMIT",
                 badgeTextColorRes = R.color.hawklyx_red,
                 badgeBgRes = R.drawable.hawklyx_badge_red,
@@ -118,14 +130,15 @@ object WidgetThemeResolver {
                 cadencePillText = "DAILY LIMIT",
                 isMarketClosed = false,
                 isStaleOrOffline = false,
-                isRefreshing = false
+                isRefreshing = false,
+                sessionDirection = sessionDirection
             )
         }
 
         // 5. FRESH Live Market Observation
         if (status == DataFreshnessStatus.FRESH && hasObservation) {
             return WidgetVisualTheme(
-                priceColorRes = R.color.hawklyx_emerald,
+                priceColorRes = resolvedPriceColor,
                 badgeText = "LIVE",
                 badgeTextColorRes = R.color.hawklyx_emerald,
                 badgeBgRes = R.drawable.hawklyx_badge_emerald,
@@ -133,13 +146,14 @@ object WidgetThemeResolver {
                 cadencePillText = "15M CADENCE",
                 isMarketClosed = false,
                 isStaleOrOffline = false,
-                isRefreshing = false
+                isRefreshing = false,
+                sessionDirection = sessionDirection
             )
         }
 
         // 6. NO DATA / Initial State
         return WidgetVisualTheme(
-            priceColorRes = R.color.hawklyx_text_muted,
+            priceColorRes = resolvedPriceColor,
             badgeText = "NO DATA",
             badgeTextColorRes = R.color.hawklyx_text_muted,
             badgeBgRes = R.drawable.hawklyx_badge_bg,
@@ -147,7 +161,8 @@ object WidgetThemeResolver {
             cadencePillText = "PENDING",
             isMarketClosed = false,
             isStaleOrOffline = false,
-            isRefreshing = false
+            isRefreshing = false,
+            sessionDirection = sessionDirection
         )
     }
 }
