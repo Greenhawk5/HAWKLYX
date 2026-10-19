@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata below."
+title: "HAWKLYX"
+type: software
+authors:
+  - family-names: "Faniani"
+    given-names: "Ali"
+    email: "ali.faniani@gmail.com"
+    website: "https://alifaniani.ir"
+repository-code: "https://github.com/Greenhawk5/HAWKLYX"
+url: "https://github.com/Greenhawk5/HAWKLYX"
+abstract: "A lightweight, privacy-preserving Brent crude oil monitor for Android with glanceable home-screen widgets and a resilient Cloudflare Worker edge service."
+keywords:
+  - "android"
+  - "jetpack-compose"
+  - "app-widget"
+  - "brent-crude"
+  - "oil-price"
+  - "cloudflare-workers"
+  - "durable-objects"
+  - "finance"
+license: "MIT"
+version: "1.0.0-rc"

@@ -1,0 +1,61 @@
+name: Feature Request
+description: Suggest an idea or enhancement for HAWKLYX.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### Propose an improvement or new feature
+        Thank you for helping make HAWKLYX better! Please provide details about your proposal.
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Target Component
+      description: Which area of the product would this feature enhance?
+      options:
+        - "Home-Screen Widgets"
+        - "Jetpack Compose Application UI"
+        - "Historical Charting & Analytics"
+        - "Cloudflare Worker Edge Service"
+        - "Developer Experience / CI / Documentation"
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or Use Case
+      description: Is your feature request related to a problem or specific workflow?
+      placeholder: "I am always frustrated when..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution or UX
+      description: Describe what you would like to see implemented.
+      placeholder: "A clear and concise description of what should happen..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Describe any alternative approaches or workarounds you have considered.
+      placeholder: "Brief explanation of other options..."
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-submission Checklist
+      options:
+        - label: "I have checked existing feature requests to ensure this is not a duplicate."
+          required: true
+        - label: "I understand that HAWKLYX is a non-commercial educational project prioritizing minimal precision."
+          required: true

@@ -22,7 +22,7 @@ Edge Request (Worker Isolate C) ──┘        ├── Shared SQLite Persist
 ```
 
 ### Key Reliability Guarantees
-1. **Cross-Isolate Atomic Quotas**: All Worker isolates route to the deterministic singleton Durable Object (`env.COORDINATOR.getByName("global")`). Quota counts and the global daily budget of 200 requests cannot be exceeded by concurrency across multiple edge datacenters.
+1. **Cross-Isolate Atomic Quotas**: All Worker isolates route to the deterministic singleton Durable Object (`env.COORDINATOR.getByName("global")`). Quota counts and the global daily budget of 250 requests (110 automatic reserve, 140 manual cap) cannot be exceeded by concurrency across multiple edge datacenters.
 2. **Persistent SQLite State**: Quota usage, account quarantine states, cooldown timestamps, and the last known-good price observation survive Worker isolate restarts, redeployments, and edge evictions.
 3. **Global Request Coalescing**: If 50 clients tap refresh simultaneously when the cache expires, all 50 await the exact same single in-flight upstream fetch.
 4. **Preservation of Last Known-Good Price**: Valid observations with `stale: true` or `synthetic: true` are served with status `stale` but **never overwrite** the last known-good valid observation. If upstream later fails, the last known-good price is preserved.
@@ -60,7 +60,9 @@ Configuration is specified in [`wrangler.jsonc`](file:///backend/worker/wrangler
     "DEFAULT_UPSTREAM_INTERVAL_MINUTES": "15",
     "MANUAL_REFRESH_COOLDOWN_SECONDS": "180",
     "MAX_DAILY_QUOTA_PER_ACCOUNT": "50",
-    "GLOBAL_DAILY_BUDGET": "200",
+    "GLOBAL_DAILY_BUDGET": "250",
+    "AUTOMATIC_RESERVE_BUDGET": "110",
+    "MANUAL_BUDGET_CAP": "140",
     "PRICE_SANITY_MIN": "10",
     "PRICE_SANITY_MAX": "250"
   }
@@ -107,7 +109,7 @@ Run all local validation checks before deploying:
 # 1. Typecheck TypeScript sources
 npm run typecheck
 
-# 2. Run all Vitest test suites (32 unit & integration tests)
+# 2. Run all Vitest test suites (69 unit & integration tests)
 npm test
 
 # 3. Check dependencies and security vulnerabilities

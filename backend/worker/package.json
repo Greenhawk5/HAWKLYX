@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "description": "Cloudflare Worker edge service and resilience layer for HAWKLYX Brent crude oil price monitor",
   "main": "src/index.ts",
+  "author": "Ali Faniani",
+  "license": "MIT",
   "scripts": {
     "dev": "wrangler dev",
     "build": "wrangler deploy --dry-run",
