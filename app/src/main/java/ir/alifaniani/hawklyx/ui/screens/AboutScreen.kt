@@ -297,7 +297,7 @@ fun AboutScreen(
         ) {
             InformationRow(
                 label = "Application Version",
-                value = "1.0 (Build 1)"
+                value = "1.0.0 (Build 1)"
             )
             InformationRow(
                 label = "Application ID",

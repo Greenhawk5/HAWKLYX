@@ -10,7 +10,8 @@ Only the latest code on the default branch and the latest official release recei
 
 | Version | Supported | Notes |
 |:---|:---:|:---|
-| `main` (pre-v1.0.0) | Yes | Active development and release candidate branch |
+| `1.0.x` / `v1.0.0` | Yes | Stable release series |
+| `main` | Yes | Active development branch |
 | `< 1.0.0` | No | Experimental and pre-release commits are unsupported |
 
 ---

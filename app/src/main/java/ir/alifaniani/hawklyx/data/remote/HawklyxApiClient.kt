@@ -50,7 +50,7 @@ class HawklyxApiClient(
                 readTimeout = readTimeoutMs
                 instanceFollowRedirects = true
                 setRequestProperty("Accept", "application/json")
-                setRequestProperty("User-Agent", "HAWKLYX-Android/1.0")
+                setRequestProperty("User-Agent", "HAWKLYX-Android/1.0.0")
             }
 
             val responseCode = connection.responseCode
