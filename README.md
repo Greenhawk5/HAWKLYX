@@ -15,7 +15,7 @@
 [Security](#-security--privacy)
 
 [![CI](https://github.com/Greenhawk5/HAWKLYX/actions/workflows/ci.yml/badge.svg)](https://github.com/Greenhawk5/HAWKLYX/actions/workflows/ci.yml)
-[![Version: v1.0.0](https://img.shields.io/badge/Version-v1.0.0-62E59A?style=for-the-badge)](https://github.com/Greenhawk5/HAWKLYX/releases/tag/v1.0.0)
+[![Version](https://img.shields.io/github/v/release/Greenhawk5/HAWKLYX?style=for-the-badge&color=62E59A&label=Version)](https://github.com/Greenhawk5/HAWKLYX/releases/latest)
 ![Android](https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=for-the-badge&logo=android&logoColor=white)
 ![Kotlin](https://img.shields.io/badge/Kotlin-Android-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white)
 ![Jetpack Compose](https://img.shields.io/badge/Jetpack_Compose-UI-4285F4?style=for-the-badge&logo=jetpackcompose&logoColor=white)
@@ -50,7 +50,7 @@ The guiding principle is simple: **market data should be easy to glance at, hone
 | **Upstream data provider** | OilPriceAPI |
 | **Historical data** | Verified hourly observations and daily rollups |
 | **License** | MIT — see [`LICENSE`](LICENSE) |
-| **Release status** | Stable `v1.0.0`; see [GitHub Releases](https://github.com/Greenhawk5/HAWKLYX/releases/tag/v1.0.0) for published builds |
+| **Release status** | Stable `v1.1.0`; see [GitHub Releases](https://github.com/Greenhawk5/HAWKLYX/releases/tag/v1.1.0) for published builds |
 
 ## ✦ Features
 
@@ -348,11 +348,15 @@ Please review [`SECURITY.md`](SECURITY.md) before reporting a vulnerability. Nev
 
 ---
 
-## ✦ Release status
+## ✦ Release status & Download
 
-HAWKLYX is released as stable `v1.0.0`. Published builds, release notes, and assets are available via [GitHub Releases](https://github.com/Greenhawk5/HAWKLYX/releases/tag/v1.0.0).
+HAWKLYX is released as stable `v1.1.0`. Published builds, release notes, and verified assets are available via GitHub Releases.
 
-- [GitHub Releases](https://github.com/Greenhawk5/HAWKLYX/releases/tag/v1.0.0)
+### Download HAWKLYX v1.1.0
+
+- **Direct APK Download**: [`HAWKLYX-v1.1.0.apk`](https://github.com/Greenhawk5/HAWKLYX/releases/download/v1.1.0/HAWKLYX-v1.1.0.apk)
+- **Release Page**: [HAWKLYX v1.1.0 Release](https://github.com/Greenhawk5/HAWKLYX/releases/tag/v1.1.0)
+- **All Releases**: [GitHub Releases](https://github.com/Greenhawk5/HAWKLYX/releases)
 - [CI runs](https://github.com/Greenhawk5/HAWKLYX/actions/workflows/ci.yml)
 - [Report a bug](https://github.com/Greenhawk5/HAWKLYX/issues/new)
 

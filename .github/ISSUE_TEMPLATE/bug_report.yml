@@ -72,7 +72,7 @@ body:
       placeholder: |
         - Device: [e.g., Google Pixel 8, Samsung Galaxy S24, Emulator]
         - Android Version: [e.g., Android 14, Android 15]
-        - HAWKLYX Version / Commit: [e.g., 1.0.0, commit 14329e9]
+        - HAWKLYX Version / Commit: [e.g., 1.1.0, commit f3081d3]
         - Node / Wrangler (if backend): [e.g., Node 20.11, Wrangler 4.151.1]
     validations:
       required: false
