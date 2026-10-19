@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-19
+
+### Fixed
+- **Release Build Startup Crash**: Resolved `java.lang.IllegalAccessError` (`Class kotlin.collections.f extended by class de is inaccessible`) on app startup by removing the erroneous `packageScope` setting under R8 release optimization in `app/build.gradle.kts`.
+- **WorkManager & Room R8 Keep Rules**: Added explicit ProGuard keep rules for reflectively instantiated WorkManager database classes (`androidx.work.impl.WorkDatabase_Impl`) in `app/proguard-rules.pro`.
+
+### Changed
+- **Release Signing Configuration**: Configured `app/build.gradle.kts` to load release signing properties dynamically from local properties (`local.properties`) or environment variables, removing debug signing from release builds while keeping secrets out of source control.
+- **Application Version**: Bumped `versionName` to `1.1.0` and `versionCode` to `2`.
+
+---
+
 ## [1.0.0] - 2026-10-19
 
 ### Added
@@ -56,5 +68,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/Greenhawk5/HAWKLYX/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/Greenhawk5/HAWKLYX/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/Greenhawk5/HAWKLYX/releases/tag/v1.1.0
 [1.0.0]: https://github.com/Greenhawk5/HAWKLYX/releases/tag/v1.0.0
